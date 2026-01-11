@@ -46,7 +46,7 @@
 | F-UI | Interfaz Usuario | 🔄 en progreso |
 | F-FINAL | Integración Final | ❌ pendiente |
 
-### Última sesión (2026-01-10)
+### Última sesión (2026-01-10 18:30)
 
 **4 Features completadas:**
 
@@ -155,7 +155,7 @@ pytest tests/ -v
 
 ## REPOSITORIO
 
-- **GitHub**: https://github.com/kcortes765/strux
+- **GitHub**: https://github.com/p-astudillo/nifes-strucs
 - **Branch**: main
 
 ---
