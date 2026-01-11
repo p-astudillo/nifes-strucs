@@ -35,7 +35,7 @@ from paz.domain.model.project import Project, ProjectFile
 from paz.infrastructure.repositories.file_repository import FileRepository
 from paz.infrastructure.repositories.materials_repository import MaterialsRepository
 from paz.infrastructure.repositories.sections_repository import SectionsRepository
-from paz.presentation.dialogs import MaterialDialog, SectionDialog
+from paz.presentation.dialogs import FrameDialog, MaterialDialog, NodeDialog, SectionDialog
 from paz.presentation.viewport import ViewportWidget
 
 
@@ -159,6 +159,20 @@ class MainWindow(QMainWindow):
         self._redo_action.setEnabled(False)
         edit_menu.addAction(self._redo_action)
 
+        edit_menu.addSeparator()
+
+        delete_action = QAction("&Delete", self)
+        delete_action.setShortcut(QKeySequence.StandardKey.Delete)
+        delete_action.triggered.connect(self._on_delete)
+        edit_menu.addAction(delete_action)
+
+        edit_menu.addSeparator()
+
+        select_all_action = QAction("Select &All", self)
+        select_all_action.setShortcut(QKeySequence.StandardKey.SelectAll)
+        select_all_action.triggered.connect(self._on_select_all)
+        edit_menu.addAction(select_all_action)
+
         # View menu
         view_menu = menubar.addMenu("&View")
 
@@ -170,15 +184,39 @@ class MainWindow(QMainWindow):
         # Model menu
         model_menu = menubar.addMenu("&Model")
 
+        add_node_action = QAction("Add &Node...", self)
+        add_node_action.setShortcut("Ctrl+Shift+N")
+        add_node_action.triggered.connect(self._on_add_node_dialog)
+        model_menu.addAction(add_node_action)
+
+        add_frame_action = QAction("Add &Frame...", self)
+        add_frame_action.setShortcut("Ctrl+Shift+F")
+        add_frame_action.triggered.connect(self._on_add_frame_dialog)
+        model_menu.addAction(add_frame_action)
+
+        model_menu.addSeparator()
+
         materials_action = QAction("&Materials...", self)
-        materials_action.setShortcut("M")
         materials_action.triggered.connect(self._on_select_material)
         model_menu.addAction(materials_action)
 
         sections_action = QAction("&Sections...", self)
-        sections_action.setShortcut("S")
         sections_action.triggered.connect(self._on_select_section)
         model_menu.addAction(sections_action)
+
+        # Analysis menu
+        analysis_menu = menubar.addMenu("&Analysis")
+
+        run_analysis_action = QAction("&Run Analysis", self)
+        run_analysis_action.setShortcut("F5")
+        run_analysis_action.triggered.connect(self._on_run_analysis)
+        analysis_menu.addAction(run_analysis_action)
+
+        analysis_menu.addSeparator()
+
+        view_results_action = QAction("&View Results", self)
+        view_results_action.triggered.connect(self._on_view_results)
+        analysis_menu.addAction(view_results_action)
 
     def _setup_toolbar(self) -> None:
         """Create the main toolbar with drawing tools."""
@@ -643,8 +681,102 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_delete(self) -> None:
         """Delete selected elements."""
-        # TODO: Implement selection and deletion
-        self._status_bar.showMessage("Delete: No selection", 2000)
+        # TODO: Implement proper selection-based deletion
+        self._status_bar.showMessage("Delete: Select elements first", 2000)
+
+    @Slot()
+    def _on_select_all(self) -> None:
+        """Select all elements."""
+        # TODO: Implement proper selection
+        node_count = self._model.node_count
+        frame_count = self._model.frame_count
+        self._status_bar.showMessage(
+            f"Selected: {node_count} nodes, {frame_count} frames", 2000
+        )
+
+    @Slot()
+    def _on_add_node_dialog(self) -> None:
+        """Open dialog to add a new node."""
+        dialog = NodeDialog(self, title="Add Node")
+
+        if dialog.exec() == NodeDialog.DialogCode.Accepted:
+            data = dialog.get_node_data()
+            cmd = CreateNodeCommand(
+                self._model,
+                data["x"],
+                data["y"],
+                data["z"],
+                restraint=data["restraint"],
+            )
+            try:
+                self._undo_service.execute(cmd)
+                self._on_model_changed()
+                self._status_bar.showMessage(
+                    f"Node created at ({data['x']:.2f}, {data['y']:.2f}, {data['z']:.2f})",
+                    2000,
+                )
+            except Exception as e:
+                self._status_bar.showMessage(f"Error: {e}", 3000)
+
+    @Slot()
+    def _on_add_frame_dialog(self) -> None:
+        """Open dialog to configure frame properties before creation."""
+        dialog = FrameDialog(
+            self,
+            materials_repo=self._materials_repository,
+            sections_repo=self._sections_repository,
+            title="Frame Properties",
+        )
+
+        if dialog.exec() == FrameDialog.DialogCode.Accepted:
+            self._default_material = dialog.get_material_name()
+            self._default_section = dialog.get_section_name()
+            # Switch to frame tool for drawing
+            self._set_tool(DrawingTool.FRAME)
+            self._status_bar.showMessage(
+                f"Frame tool active: {self._default_section} ({self._default_material}). Click two nodes.",
+                5000,
+            )
+
+    @Slot()
+    def _on_run_analysis(self) -> None:
+        """Run structural analysis."""
+        # Check if model is valid for analysis
+        if self._model.node_count < 2:
+            QMessageBox.warning(
+                self,
+                "Cannot Run Analysis",
+                "Model must have at least 2 nodes.",
+            )
+            return
+
+        if self._model.frame_count < 1:
+            QMessageBox.warning(
+                self,
+                "Cannot Run Analysis",
+                "Model must have at least 1 frame.",
+            )
+            return
+
+        # Check for supports
+        has_support = any(node.is_supported for node in self._model.nodes)
+        if not has_support:
+            QMessageBox.warning(
+                self,
+                "Cannot Run Analysis",
+                "Model must have at least one supported node.",
+            )
+            return
+
+        self._status_bar.showMessage("Running analysis...", 0)
+        # TODO: Integrate with AnalysisService
+        self._status_bar.showMessage("Analysis: Not yet implemented", 3000)
+
+    @Slot()
+    def _on_view_results(self) -> None:
+        """View analysis results."""
+        # TODO: Show results panel
+        self._status_bar.showMessage("View Results: Run analysis first", 2000)
 
     def get_model(self) -> StructuralModel:
         """Get the current structural model."""

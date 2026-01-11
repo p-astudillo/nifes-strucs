@@ -7,7 +7,7 @@
 ## PROYECTO
 **Nombre**: PAZ (Software Profesional de Análisis Estructural)
 **Estado**: en progreso
-**Última actividad**: 2026-01-11 10:30
+**Última actividad**: 2026-01-11 11:30
 
 ---
 
@@ -46,31 +46,34 @@
 | F-UI | Interfaz Usuario | 🔄 en progreso |
 | F-FINAL | Integración Final | ❌ pendiente |
 
-### Última sesión (2026-01-11 10:30)
+### Última sesión (2026-01-11 11:30)
 
-**F-UI - Continuación de Interfaz de Usuario:**
+**F-UI - Interfaz de Usuario (continuación):**
 
-1. **Diálogos de Materiales y Secciones**
-   - `presentation/dialogs/__init__.py` - Módulo de diálogos
-   - `presentation/dialogs/material_dialog.py` - MaterialDialog
-     - Filtro por tipo (Steel, Concrete, etc.)
-     - Búsqueda por nombre
-     - Vista de propiedades (E, G, nu, rho, fy, fu, fc)
-   - `presentation/dialogs/section_dialog.py` - SectionDialog
-     - Filtro por forma (W, HSS, L, C, etc.)
-     - Búsqueda por designación
-     - Vista de propiedades geométricas (A, Ix, Iy, Sx, Sy, rx, ry, Zx, Zy, J)
+1. **Diálogos de Nodos y Frames**
+   - `presentation/dialogs/node_dialog.py` - NodeDialog
+     - Edición de coordenadas X, Y, Z
+     - Configuración de restraints con presets (Free, Fixed, Pinned, Roller)
+     - Checkboxes individuales para cada DOF
+   - `presentation/dialogs/frame_dialog.py` - FrameDialog
+     - Selector de material (abre MaterialDialog)
+     - Selector de sección (abre SectionDialog)
+     - Rotación en grados
+     - Releases con presets (Fixed-Fixed, Pinned-Pinned, etc.)
+     - Label opcional
 
-2. **Integración File > Open/Save en MainWindow**
-   - Menú File: New, Open, Save, Save As, Exit
-   - Menú Model: Materials, Sections (abre diálogos)
-   - Guardar/cargar proyectos .paz
-   - Indicador de modificación (*) en título
-   - Confirmación antes de descartar cambios
+2. **Menús completos en MainWindow**
+   - **File**: New, Open, Save, Save As, Exit
+   - **Edit**: Undo, Redo, Delete, Select All
+   - **View**: Reset View
+   - **Model**: Add Node, Add Frame, Materials, Sections
+   - **Analysis**: Run Analysis (F5), View Results
 
-3. **Tests para diálogos**
-   - `tests/unit/presentation/dialogs/test_material_dialog.py`
-   - `tests/unit/presentation/dialogs/test_section_dialog.py`
+3. **Shortcuts de teclado**
+   - Ctrl+Shift+N: Add Node dialog
+   - Ctrl+Shift+F: Add Frame dialog
+   - F5: Run Analysis
+   - Delete, Ctrl+A, Ctrl+Z, Ctrl+Y, etc.
 
 ### Sesión anterior (2026-01-10 18:30)
 
@@ -115,15 +118,17 @@
 ```
 backend/src/paz/presentation/
 ├── dialogs/
-│   ├── __init__.py           # NUEVO - exports MaterialDialog, SectionDialog
-│   ├── material_dialog.py    # NUEVO - diálogo selección materiales
-│   └── section_dialog.py     # NUEVO - diálogo selección secciones
-└── main_window.py            # MODIFICADO - Open/Save, menú Model
+│   ├── __init__.py           # MODIFICADO - exports 4 dialogs
+│   ├── frame_dialog.py       # NUEVO - diálogo edición frames
+│   ├── material_dialog.py    # diálogo selección materiales
+│   ├── node_dialog.py        # NUEVO - diálogo edición nodos
+│   └── section_dialog.py     # diálogo selección secciones
+└── main_window.py            # MODIFICADO - menús completos, Analysis
 
 backend/tests/unit/presentation/dialogs/
-├── __init__.py               # NUEVO
-├── test_material_dialog.py   # NUEVO - tests lógica materiales
-└── test_section_dialog.py    # NUEVO - tests lógica secciones
+├── __init__.py
+├── test_material_dialog.py
+└── test_section_dialog.py
 ```
 
 ---
@@ -160,4 +165,4 @@ pytest tests/ -v
 
 ---
 
-*Generado: 2026-01-11 10:30*
+*Generado: 2026-01-11 11:30*
