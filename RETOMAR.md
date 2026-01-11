@@ -7,7 +7,7 @@
 ## PROYECTO
 **Nombre**: PAZ (Software Profesional de Análisis Estructural)
 **Estado**: en progreso
-**Última actividad**: 2026-01-10 18:30
+**Última actividad**: 2026-01-11 10:30
 
 ---
 
@@ -46,7 +46,33 @@
 | F-UI | Interfaz Usuario | 🔄 en progreso |
 | F-FINAL | Integración Final | ❌ pendiente |
 
-### Última sesión (2026-01-10 18:30)
+### Última sesión (2026-01-11 10:30)
+
+**F-UI - Continuación de Interfaz de Usuario:**
+
+1. **Diálogos de Materiales y Secciones**
+   - `presentation/dialogs/__init__.py` - Módulo de diálogos
+   - `presentation/dialogs/material_dialog.py` - MaterialDialog
+     - Filtro por tipo (Steel, Concrete, etc.)
+     - Búsqueda por nombre
+     - Vista de propiedades (E, G, nu, rho, fy, fu, fc)
+   - `presentation/dialogs/section_dialog.py` - SectionDialog
+     - Filtro por forma (W, HSS, L, C, etc.)
+     - Búsqueda por designación
+     - Vista de propiedades geométricas (A, Ix, Iy, Sx, Sy, rx, ry, Zx, Zy, J)
+
+2. **Integración File > Open/Save en MainWindow**
+   - Menú File: New, Open, Save, Save As, Exit
+   - Menú Model: Materials, Sections (abre diálogos)
+   - Guardar/cargar proyectos .paz
+   - Indicador de modificación (*) en título
+   - Confirmación antes de descartar cambios
+
+3. **Tests para diálogos**
+   - `tests/unit/presentation/dialogs/test_material_dialog.py`
+   - `tests/unit/presentation/dialogs/test_section_dialog.py`
+
+### Sesión anterior (2026-01-10 18:30)
 
 **4 Features completadas:**
 
@@ -54,29 +80,18 @@
    - `infrastructure/exporters/csv_exporter.py` - CSVExporter, ResultsExporter
    - `infrastructure/importers/csv_importer.py` - CSVImporter
    - `infrastructure/importers/dxf_importer.py` - DXFImporter (AutoCAD)
-   - Dependencia agregada: `ezdxf>=1.0.0`
 
 2. **F36 - Section Designer** (20 tests)
    - `domain/sections/section_designer.py` - SectionDesigner, SectionRegion
-   - Funciones: `create_double_angle()`, `create_built_up_section()`
-   - Soporta: rectangles, circles, I-shapes, polygons, composites
 
 3. **F37 - Conversor de Unidades** (35 tests)
-   - `core/units.py` ampliado con: area, inertia, section_modulus, linear_load
-   - Funciones rápidas: `m_to_ft()`, `kN_to_kip()`, `deg_to_rad()`, etc.
+   - `core/units.py` ampliado con conversiones adicionales
 
 4. **F38 - Compatibilidad macOS** (19 tests)
    - `core/platform.py` - Detección de plataforma y dependencias
-   - Soporta: macOS (Intel + Apple Silicon), Windows, Linux
-   - Verifica: OpenSees, Qt, PyVista, NumPy
-
-**También iniciado: F-UI**
-   - `presentation/main_window.py` - MainWindow con toolbar y viewport
-   - Herramientas: Select (V), Node (N), Frame (F)
-   - Undo/Redo funcional
 
 ### Próxima tarea
-- **F-UI (continuar)**: Diálogos de materiales/secciones, guardar/cargar
+- **F-UI (continuar)**: Property panel mejorado, Model tree mejorado
 - **F-FINAL**: Integración final del MVP
 
 ---
@@ -98,32 +113,17 @@
 ## ARCHIVOS MODIFICADOS (SESIÓN ACTUAL)
 
 ```
-backend/src/paz/
-├── core/
-│   ├── units.py              # Ampliado - conversiones adicionales
-│   └── platform.py           # NUEVO - detección plataforma
-├── domain/
-│   └── sections/
-│       └── section_designer.py  # NUEVO - secciones custom
-├── infrastructure/
-│   ├── exporters/
-│   │   └── csv_exporter.py   # NUEVO - export CSV
-│   └── importers/
-│       ├── csv_importer.py   # NUEVO - import CSV
-│       └── dxf_importer.py   # NUEVO - import DXF
-└── presentation/
-    └── main_window.py        # NUEVO - MainWindow GUI
+backend/src/paz/presentation/
+├── dialogs/
+│   ├── __init__.py           # NUEVO - exports MaterialDialog, SectionDialog
+│   ├── material_dialog.py    # NUEVO - diálogo selección materiales
+│   └── section_dialog.py     # NUEVO - diálogo selección secciones
+└── main_window.py            # MODIFICADO - Open/Save, menú Model
 
-backend/tests/unit/
-├── core/
-│   ├── test_units.py         # Ampliado - 35 tests
-│   └── test_platform.py      # NUEVO - 19 tests
-├── domain/
-│   └── test_section_designer.py  # NUEVO - 20 tests
-└── infrastructure/
-    ├── test_csv_exporter.py  # NUEVO - 7 tests
-    ├── test_csv_importer.py  # NUEVO - 10 tests
-    └── test_dxf_importer.py  # NUEVO - 17 tests
+backend/tests/unit/presentation/dialogs/
+├── __init__.py               # NUEVO
+├── test_material_dialog.py   # NUEVO - tests lógica materiales
+└── test_section_dialog.py    # NUEVO - tests lógica secciones
 ```
 
 ---
@@ -160,4 +160,4 @@ pytest tests/ -v
 
 ---
 
-*Generado: 2026-01-10 18:30*
+*Generado: 2026-01-11 10:30*

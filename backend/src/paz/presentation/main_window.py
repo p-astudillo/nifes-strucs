@@ -15,6 +15,7 @@ from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QDockWidget,
+    QFileDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -30,6 +31,11 @@ from paz.application.commands import CreateNodeCommand, CreateFrameCommand
 from paz.application.services import UndoRedoService
 from paz.core.grid_config import GridConfig
 from paz.domain.model import StructuralModel
+from paz.domain.model.project import Project, ProjectFile
+from paz.infrastructure.repositories.file_repository import FileRepository
+from paz.infrastructure.repositories.materials_repository import MaterialsRepository
+from paz.infrastructure.repositories.sections_repository import SectionsRepository
+from paz.presentation.dialogs import MaterialDialog, SectionDialog
 from paz.presentation.viewport import ViewportWidget
 
 
@@ -72,8 +78,18 @@ class MainWindow(QMainWindow):
         self._model = StructuralModel()
         self._undo_service = UndoRedoService()
         self._current_tool = DrawingTool.SELECT
-        self._default_material = "Steel"
-        self._default_section = "W14x22"
+        self._default_material = "A36"
+        self._default_section = "W14X22"
+
+        # Project management
+        self._project = Project(name="Untitled")
+        self._project_path: str | None = None
+        self._is_modified = False
+
+        # Repositories
+        self._file_repository = FileRepository()
+        self._materials_repository = MaterialsRepository()
+        self._sections_repository = SectionsRepository()
 
         # For frame creation: store first node
         self._frame_start_node_id: int | None = None
@@ -104,6 +120,23 @@ class MainWindow(QMainWindow):
         new_action.triggered.connect(self._on_new_project)
         file_menu.addAction(new_action)
 
+        open_action = QAction("&Open...", self)
+        open_action.setShortcut(QKeySequence.StandardKey.Open)
+        open_action.triggered.connect(self._on_open_project)
+        file_menu.addAction(open_action)
+
+        file_menu.addSeparator()
+
+        save_action = QAction("&Save", self)
+        save_action.setShortcut(QKeySequence.StandardKey.Save)
+        save_action.triggered.connect(self._on_save_project)
+        file_menu.addAction(save_action)
+
+        save_as_action = QAction("Save &As...", self)
+        save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
+        save_as_action.triggered.connect(self._on_save_project_as)
+        file_menu.addAction(save_as_action)
+
         file_menu.addSeparator()
 
         exit_action = QAction("E&xit", self)
@@ -133,6 +166,19 @@ class MainWindow(QMainWindow):
         reset_view_action.setShortcut("R")
         reset_view_action.triggered.connect(self._on_reset_view)
         view_menu.addAction(reset_view_action)
+
+        # Model menu
+        model_menu = menubar.addMenu("&Model")
+
+        materials_action = QAction("&Materials...", self)
+        materials_action.setShortcut("M")
+        materials_action.triggered.connect(self._on_select_material)
+        model_menu.addAction(materials_action)
+
+        sections_action = QAction("&Sections...", self)
+        sections_action.setShortcut("S")
+        sections_action.triggered.connect(self._on_select_section)
+        model_menu.addAction(sections_action)
 
     def _setup_toolbar(self) -> None:
         """Create the main toolbar with drawing tools."""
@@ -388,6 +434,8 @@ class MainWindow(QMainWindow):
         self._update_model_tree()
         self._update_status_bar()
         self._update_undo_redo_actions()
+        self._is_modified = True
+        self._update_window_title()
         self.model_changed.emit()
 
     def _update_undo_redo_actions(self) -> None:
@@ -424,18 +472,152 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_new_project(self) -> None:
         """Create a new empty project."""
-        reply = QMessageBox.question(
+        if self._is_modified:
+            reply = QMessageBox.question(
+                self,
+                "New Project",
+                "Current project has unsaved changes. Discard and start new?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        self._model.clear()
+        self._undo_service.clear()
+        self._project = Project(name="Untitled")
+        self._project_path = None
+        self._is_modified = False
+        self._on_model_changed()
+        self._update_window_title()
+        self._status_bar.showMessage("New project created", 2000)
+
+    @Slot()
+    def _on_open_project(self) -> None:
+        """Open an existing project file."""
+        if self._is_modified:
+            reply = QMessageBox.question(
+                self,
+                "Open Project",
+                "Current project has unsaved changes. Discard and open?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "New Project",
-            "Clear current model and start new project?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            "Open Project",
+            "",
+            "PAZ Files (*.paz);;All Files (*)",
         )
 
-        if reply == QMessageBox.StandardButton.Yes:
-            self._model.clear()
+        if not file_path:
+            return
+
+        try:
+            project_file = self._file_repository.load(file_path)
+            self._project = project_file.project
+            self._project_path = file_path
+
+            # Load model from project file
+            if project_file.model:
+                self._model = StructuralModel.from_dict(project_file.model)
+            else:
+                self._model = StructuralModel()
+
             self._undo_service.clear()
+            self._is_modified = False
             self._on_model_changed()
-            self._status_bar.showMessage("New project created", 2000)
+            self._update_window_title()
+            self._status_bar.showMessage(f"Opened: {file_path}", 3000)
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error Opening Project",
+                f"Failed to open project:\n{e}",
+            )
+
+    @Slot()
+    def _on_save_project(self) -> None:
+        """Save the current project."""
+        if self._project_path is None:
+            self._on_save_project_as()
+            return
+
+        self._save_to_path(self._project_path)
+
+    @Slot()
+    def _on_save_project_as(self) -> None:
+        """Save the current project to a new file."""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Project As",
+            f"{self._project.name}.paz",
+            "PAZ Files (*.paz);;All Files (*)",
+        )
+
+        if not file_path:
+            return
+
+        self._save_to_path(file_path)
+
+    def _save_to_path(self, file_path: str) -> None:
+        """Save the project to the specified path."""
+        try:
+            project_file = ProjectFile(
+                project=self._project,
+                model=self._model.to_dict(),
+            )
+            self._file_repository.save(project_file, file_path)
+            self._project_path = file_path
+            self._is_modified = False
+            self._update_window_title()
+            self._status_bar.showMessage(f"Saved: {file_path}", 3000)
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error Saving Project",
+                f"Failed to save project:\n{e}",
+            )
+
+    def _update_window_title(self) -> None:
+        """Update the window title with project name and modified status."""
+        title = f"PAZ - {self._project.name}"
+        if self._is_modified:
+            title += " *"
+        self.setWindowTitle(title)
+
+    @Slot()
+    def _on_select_material(self) -> None:
+        """Open the material selection dialog."""
+        dialog = MaterialDialog(
+            self,
+            repository=self._materials_repository,
+            current_material=self._default_material,
+        )
+
+        if dialog.exec() == MaterialDialog.DialogCode.Accepted:
+            material_name = dialog.get_selected_material_name()
+            if material_name:
+                self._default_material = material_name
+                self._status_bar.showMessage(f"Material: {material_name}", 2000)
+
+    @Slot()
+    def _on_select_section(self) -> None:
+        """Open the section selection dialog."""
+        dialog = SectionDialog(
+            self,
+            repository=self._sections_repository,
+            current_section=self._default_section,
+        )
+
+        if dialog.exec() == SectionDialog.DialogCode.Accepted:
+            section_name = dialog.get_selected_section_name()
+            if section_name:
+                self._default_section = section_name
+                self._status_bar.showMessage(f"Section: {section_name}", 2000)
 
     @Slot()
     def _on_undo(self) -> None:
