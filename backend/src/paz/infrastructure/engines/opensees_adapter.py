@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from paz.domain.loads import DistributedLoad, LoadCase, NodalLoad
+from paz.domain.loads import DistributedLoad, LoadCase, NodalLoad, PointLoadOnFrame
 from paz.domain.materials import Material
 from paz.domain.model import StructuralModel
 from paz.domain.results import AnalysisResults
@@ -129,6 +129,7 @@ class OpenSeesAdapter(AnalysisEngine):
         load_case: LoadCase,
         nodal_loads: list[NodalLoad],
         distributed_loads: list[DistributedLoad],
+        point_loads: list[PointLoadOnFrame] | None = None,
     ) -> None:
         """
         Apply loads and write the complete TCL file.
@@ -137,11 +138,13 @@ class OpenSeesAdapter(AnalysisEngine):
             load_case: Load case being analyzed
             nodal_loads: Nodal loads for this case
             distributed_loads: Distributed loads for this case
+            point_loads: Point loads on frames for this case
         """
         if not self._model_built or self._model is None:
             raise RuntimeError("Model must be built before applying loads")
 
         self._load_case = load_case
+        point_loads = point_loads or []
 
         # Write TCL file
         work_dir = self._get_work_dir()
@@ -154,6 +157,7 @@ class OpenSeesAdapter(AnalysisEngine):
             load_case=load_case,
             nodal_loads=nodal_loads,
             distributed_loads=distributed_loads,
+            point_loads=point_loads,
         )
 
     def run_analysis(

@@ -5,7 +5,23 @@ Defines which degrees of freedom are fixed at a node.
 """
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any
+
+
+class RestraintType(str, Enum):
+    """
+    Predefined restraint types for common support conditions.
+    """
+
+    FREE = "free"
+    FIXED = "fixed"
+    PINNED = "pinned"
+    ROLLER_X = "roller_x"
+    ROLLER_Y = "roller_y"
+    ROLLER_Z = "roller_z"
+    VERTICAL_ONLY = "vertical_only"
+    CUSTOM = "custom"
 
 
 @dataclass(frozen=True)
@@ -100,6 +116,91 @@ class Restraint:
             rz=bool(values[5]),
         )
 
+    @classmethod
+    def from_type(cls, restraint_type: RestraintType | str) -> "Restraint":
+        """
+        Create restraint from a predefined type.
+
+        Args:
+            restraint_type: RestraintType enum or string value
+
+        Returns:
+            Restraint with appropriate DOF configuration
+        """
+        if isinstance(restraint_type, str):
+            restraint_type = RestraintType(restraint_type)
+
+        mapping = {
+            RestraintType.FREE: FREE,
+            RestraintType.FIXED: FIXED,
+            RestraintType.PINNED: PINNED,
+            RestraintType.ROLLER_X: ROLLER_X,
+            RestraintType.ROLLER_Y: ROLLER_Y,
+            RestraintType.ROLLER_Z: ROLLER_Z,
+            RestraintType.VERTICAL_ONLY: VERTICAL_ONLY,
+        }
+
+        if restraint_type == RestraintType.CUSTOM:
+            return FREE  # Custom starts as free, user sets DOFs manually
+
+        return mapping.get(restraint_type, FREE)
+
+    def get_type(self) -> RestraintType:
+        """
+        Determine the restraint type based on current DOF configuration.
+
+        Returns:
+            RestraintType that matches the current configuration
+        """
+        if self.is_free:
+            return RestraintType.FREE
+        if self.is_fixed:
+            return RestraintType.FIXED
+        if self.is_pinned:
+            return RestraintType.PINNED
+
+        # Check roller types
+        if (
+            not self.ux
+            and self.uy
+            and self.uz
+            and not self.rx
+            and not self.ry
+            and not self.rz
+        ):
+            return RestraintType.ROLLER_X
+        if (
+            self.ux
+            and not self.uy
+            and self.uz
+            and not self.rx
+            and not self.ry
+            and not self.rz
+        ):
+            return RestraintType.ROLLER_Y
+        if (
+            self.ux
+            and self.uy
+            and not self.uz
+            and not self.rx
+            and not self.ry
+            and not self.rz
+        ):
+            return RestraintType.ROLLER_Z
+
+        # Check vertical only
+        if (
+            not self.ux
+            and not self.uy
+            and self.uz
+            and not self.rx
+            and not self.ry
+            and not self.rz
+        ):
+            return RestraintType.VERTICAL_ONLY
+
+        return RestraintType.CUSTOM
+
 
 # Common restraint presets
 FREE = Restraint()
@@ -108,3 +209,29 @@ PINNED = Restraint(ux=True, uy=True, uz=True, rx=False, ry=False, rz=False)
 ROLLER_X = Restraint(ux=False, uy=True, uz=True, rx=False, ry=False, rz=False)
 ROLLER_Y = Restraint(ux=True, uy=False, uz=True, rx=False, ry=False, rz=False)
 ROLLER_Z = Restraint(ux=True, uy=True, uz=False, rx=False, ry=False, rz=False)
+VERTICAL_ONLY = Restraint(ux=False, uy=False, uz=True, rx=False, ry=False, rz=False)
+
+
+# Type descriptions for UI
+RESTRAINT_TYPE_LABELS = {
+    RestraintType.FREE: "Libre",
+    RestraintType.FIXED: "Empotrado",
+    RestraintType.PINNED: "Articulado",
+    RestraintType.ROLLER_X: "Rodillo X",
+    RestraintType.ROLLER_Y: "Rodillo Y",
+    RestraintType.ROLLER_Z: "Rodillo Z",
+    RestraintType.VERTICAL_ONLY: "Fijo Vertical",
+    RestraintType.CUSTOM: "Personalizado",
+}
+
+
+RESTRAINT_TYPE_DESCRIPTIONS = {
+    RestraintType.FREE: "Todos los DOF libres",
+    RestraintType.FIXED: "Todos los DOF restringidos (empotrado)",
+    RestraintType.PINNED: "Traslaciones restringidas, rotaciones libres",
+    RestraintType.ROLLER_X: "Libre en X, fijo en Y/Z",
+    RestraintType.ROLLER_Y: "Libre en Y, fijo en X/Z",
+    RestraintType.ROLLER_Z: "Libre en Z, fijo en X/Y",
+    RestraintType.VERTICAL_ONLY: "Solo Uz restringido",
+    RestraintType.CUSTOM: "Configuración manual por DOF",
+}

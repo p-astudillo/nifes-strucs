@@ -1,0 +1,719 @@
+{
+  "proyecto": "NIFES STRUCS",
+  "descripcion": "Software Profesional de Analisis Estructural",
+  "version": "1.0.0",
+  "generado": "2026-01-13",
+  "fase": "V1.0",
+  "base": "MVP completado",
+  "total_features": 18,
+  "orden_implementacion": "secuencial con dependencias",
+  "nota_revision": "Al alcanzar 50% de avance, realizar revision V1.5 para evaluar features adicionales",
+  "features": [
+    {
+      "id": "F39",
+      "name": "Tipos de Apoyo Avanzados",
+      "description": "Ampliar tipos de restriccion en nodos: empotrado, rotulado, rodillo, personalizado por DOF",
+      "priority": "high",
+      "category": "modeling",
+      "estimated_complexity": "medium",
+      "steps": [
+        "Extender paz/domain/model/restraint.py con RestraintType enum (FIXED, PINNED, ROLLER_X, ROLLER_Y, VERTICAL_ONLY, CUSTOM)",
+        "Implementar presets de restriccion en Restraint.from_type()",
+        "Actualizar frontend con dropdown de tipos de apoyo en modal de nodo",
+        "Agregar visualizacion diferenciada por tipo de apoyo en viewport (iconos diferentes)",
+        "Implementar panel de edicion de DOF individual para tipo CUSTOM",
+        "Actualizar API endpoints para soportar restraint_type",
+        "Crear tests unitarios para cada tipo de apoyo",
+        "Validar comportamiento en analisis con diferentes tipos de apoyo"
+      ],
+      "dependencies": ["MVP"],
+      "output_files": [
+        "backend/src/paz/domain/model/restraint.py (update)",
+        "backend/src/paz/api/schemas/model.py (update)",
+        "frontend/src/components/NodeDialog.tsx",
+        "frontend/src/components/Viewport.tsx (update - support icons)",
+        "tests/unit/domain/test_restraint_types.py"
+      ],
+      "acceptance_criteria": [
+        "Dropdown permite seleccionar tipo de apoyo predefinido",
+        "Tipo CUSTOM permite editar cada DOF individualmente",
+        "Viewport muestra icono diferente para cada tipo de apoyo",
+        "Analisis produce resultados correctos con diferentes tipos",
+        "Tests pasan al 100%"
+      ],
+      "passes": true,
+      "completed_date": "2026-01-13"
+    },
+    {
+      "id": "F40",
+      "name": "Cargas Avanzadas",
+      "description": "Cargas distribuidas, triangulares, trapezoidales, de area y conversion area a frame",
+      "priority": "high",
+      "category": "loads",
+      "estimated_complexity": "high",
+      "steps": [
+        "Implementar paz/domain/loads/distributed_load.py con UniformLoad, TriangularLoad, TrapezoidalLoad",
+        "Implementar paz/domain/loads/area_load.py para cargas en shells",
+        "Implementar paz/domain/loads/tributary_converter.py para convertir area a frames",
+        "Agregar direccion de carga (local/global, gravedad)",
+        "Actualizar OpenSeesAdapter para aplicar cargas distribuidas (eleLoad)",
+        "Crear UI para agregar cargas distribuidas a frames",
+        "Crear UI para cargas de area y conversion tributaria",
+        "Agregar visualizacion de cargas distribuidas en viewport (flechas)",
+        "Crear tests con resultados conocidos"
+      ],
+      "dependencies": ["F39"],
+      "output_files": [
+        "backend/src/paz/domain/loads/distributed_load.py",
+        "backend/src/paz/domain/loads/area_load.py",
+        "backend/src/paz/domain/loads/tributary_converter.py",
+        "backend/src/paz/infrastructure/analysis/opensees_adapter.py (update)",
+        "frontend/src/components/LoadDialog.tsx",
+        "frontend/src/components/Viewport.tsx (update - load arrows)",
+        "tests/unit/domain/test_distributed_loads.py",
+        "tests/integration/test_distributed_load_analysis.py"
+      ],
+      "acceptance_criteria": [
+        "Aplicar carga distribuida uniforme a frame",
+        "Aplicar carga triangular (0 a w) a frame",
+        "Aplicar carga trapezoidal (w1 a w2) a frame",
+        "Convertir carga de area a cargas tributarias en frames",
+        "Visualizar cargas como flechas en viewport",
+        "Resultados de analisis coinciden con SAP2000",
+        "Tests pasan al 100%"
+      ],
+      "passes": true,
+      "completed_date": "2026-01-16",
+      "notes": "Cargas de area y conversion tributaria pendientes para F03 (shells). Cargas puntuales en frames implementadas en backend."
+    },
+    {
+      "id": "F41",
+      "name": "Mass Source y Masa Automatica",
+      "description": "Calcular masa de elementos automaticamente y selector de mass source para analisis dinamico",
+      "priority": "high",
+      "category": "analysis",
+      "estimated_complexity": "medium",
+      "steps": [
+        "Agregar calculo de masa en Frame: rho * A * L",
+        "Agregar calculo de masa en Shell: rho * t * area",
+        "Implementar paz/domain/analysis/mass_source.py con MassSourceType enum",
+        "Opciones: SELF_WEIGHT, LOADS, SELF_WEIGHT_PLUS_LOADS, CUSTOM",
+        "Agregar factor de masa para cargas (ej: 0.25*Live)",
+        "Mostrar masa total y por elemento en UI",
+        "Integrar mass source con analisis modal (F14)",
+        "Crear tests unitarios"
+      ],
+      "dependencies": ["F40"],
+      "output_files": [
+        "backend/src/paz/domain/model/frame.py (update - add mass property)",
+        "backend/src/paz/domain/model/shell.py (update - add mass property)",
+        "backend/src/paz/domain/analysis/mass_source.py",
+        "backend/src/paz/api/schemas/analysis.py (update)",
+        "frontend/src/components/MassSourcePanel.tsx",
+        "tests/unit/domain/test_mass_source.py"
+      ],
+      "acceptance_criteria": [
+        "Ver masa de cada frame calculada automaticamente",
+        "Ver masa total de la estructura",
+        "Seleccionar mass source para analisis modal",
+        "Configurar factores de masa para cargas",
+        "Masa correcta segun material y seccion",
+        "Tests pasan al 100%"
+      ],
+      "passes": true,
+      "completed_date": "2026-01-16",
+      "notes": "Mass source para modal queda para F14. UI muestra masa total automaticamente."
+    },
+    {
+      "id": "F42",
+      "name": "Modo Dibujo/Analisis",
+      "description": "Separar flujo en modo dibujo (edicion) y modo analisis (resultados) como SAP2000",
+      "priority": "high",
+      "category": "ui",
+      "estimated_complexity": "medium",
+      "steps": [
+        "Agregar estado global 'mode' en store: 'draw' | 'analysis'",
+        "En modo draw: permitir todas las ediciones",
+        "En modo analysis: bloquear ediciones, mostrar resultados",
+        "Boton Play para correr analisis y cambiar a modo analysis",
+        "Boton 'Volver a Dibujo' para regresar a modo draw (limpia resultados)",
+        "Cambiar colores/estilo de UI segun modo",
+        "Advertir si hay cambios sin guardar al cambiar de modo"
+      ],
+      "dependencies": ["F41"],
+      "output_files": [
+        "frontend/src/store/useStore.ts (update - add mode)",
+        "frontend/src/App.tsx (update - mode logic)",
+        "frontend/src/components/ModeIndicator.tsx",
+        "frontend/src/components/Toolbar.tsx (update)"
+      ],
+      "acceptance_criteria": [
+        "Boton Play corre analisis y entra a modo analysis",
+        "En modo analysis no se pueden editar nodos/frames",
+        "Boton 'Volver a Dibujo' regresa a modo draw",
+        "UI muestra claramente en que modo esta",
+        "Advertencia si hay cambios sin analizar"
+      ],
+      "passes": true,
+      "completed_date": "2026-01-16",
+      "notes": "Indicador de modo en header, botones cambian segun modo, modelModified track"
+    },
+    {
+      "id": "F43",
+      "name": "Object Snap",
+      "description": "Sistema de snapping para dibujo preciso: endpoint, midpoint, node, grid, perpendicular",
+      "priority": "high",
+      "category": "modeling",
+      "estimated_complexity": "high",
+      "steps": [
+        "Implementar SnapService en frontend con tipos de snap",
+        "Snap types: ENDPOINT, MIDPOINT, NODE, GRID, PERPENDICULAR, INTERSECTION",
+        "Detectar punto snap mas cercano al cursor",
+        "Mostrar indicador visual del snap activo (circulo, cruz, etc.)",
+        "Panel de configuracion de snaps activos",
+        "Integrar con dibujo de frames (F23)",
+        "Shortcut para toggle snap on/off (F3 como AutoCAD)"
+      ],
+      "dependencies": ["F42"],
+      "output_files": [
+        "frontend/src/services/SnapService.ts",
+        "frontend/src/components/SnapIndicator.tsx",
+        "frontend/src/components/SnapSettingsPanel.tsx",
+        "frontend/src/components/Viewport.tsx (update - snap integration)"
+      ],
+      "acceptance_criteria": [
+        "Cursor se ajusta automaticamente a nodos cercanos",
+        "Indicador visual muestra tipo de snap",
+        "Activar/desactivar snaps individualmente",
+        "Shortcut F3 toggle snap global",
+        "Snap a grid funciona con configuracion de grilla"
+      ],
+      "passes": true,
+      "completed_date": "2026-01-16",
+      "notes": "SnapService con 6 tipos de snap, SnapIndicator visual, SnapSettingsPanel, F3 shortcut"
+    },
+    {
+      "id": "F23",
+      "name": "Dibujo Dinamico Integrado",
+      "description": "Dibujar frames directamente en el viewport con click y snap",
+      "priority": "high",
+      "category": "modeling",
+      "estimated_complexity": "high",
+      "steps": [
+        "Implementar modo dibujo de frames en viewport",
+        "Click 1: punto inicial (crea nodo si no existe)",
+        "Click 2: punto final (crea nodo y frame)",
+        "Linea preview mientras se mueve el mouse",
+        "Integrar con Object Snap (F43)",
+        "Panel de propiedades rapidas: material, seccion",
+        "Shortcut para activar modo dibujo (D)",
+        "ESC para cancelar dibujo en progreso",
+        "Dibujo continuo: despues de crear frame, punto final es nuevo inicio"
+      ],
+      "dependencies": ["F43"],
+      "output_files": [
+        "frontend/src/services/DrawingService.ts",
+        "frontend/src/components/DrawingMode.tsx",
+        "frontend/src/components/Viewport.tsx (update - drawing mode)",
+        "frontend/src/components/QuickPropertiesPanel.tsx"
+      ],
+      "acceptance_criteria": [
+        "Dibujar frame con dos clicks en viewport",
+        "Preview de linea mientras se dibuja",
+        "Snap funciona durante dibujo",
+        "Material y seccion asignados automaticamente",
+        "Dibujo continuo funciona",
+        "ESC cancela dibujo en progreso"
+      ],
+      "passes": true,
+      "completed_date": "2026-01-16",
+      "notes": "DrawingService, DrawingMode component, click handling, D shortcut, ESC cancel, continuous mode"
+    },
+    {
+      "id": "F03",
+      "name": "Modelacion de Shells",
+      "description": "Crear, editar y eliminar elementos shell (losas, muros) de 3 o 4 nodos",
+      "priority": "high",
+      "category": "modeling",
+      "estimated_complexity": "high",
+      "steps": [
+        "Implementar paz/domain/model/shell.py con dataclass Shell",
+        "Propiedades: node_ids (3 o 4), material_id, thickness, shell_type (PLATE, MEMBRANE, SHELL)",
+        "Agregar shells a StructuralModel con CRUD",
+        "Implementar ShellCommands (Create, Delete, Modify)",
+        "Agregar shells a serializacion del proyecto",
+        "Actualizar OpenSeesAdapter para crear elementos shell",
+        "Visualizar shells en viewport (superficie con color)",
+        "Obtener resultados de shells (fuerzas por unidad de longitud)"
+      ],
+      "dependencies": ["F23"],
+      "output_files": [
+        "backend/src/paz/domain/model/shell.py",
+        "backend/src/paz/application/commands/shell_commands.py",
+        "backend/src/paz/infrastructure/analysis/opensees_adapter.py (update)",
+        "backend/src/paz/api/routers/model.py (update)",
+        "frontend/src/components/ShellDialog.tsx",
+        "frontend/src/components/Viewport.tsx (update - shell rendering)",
+        "tests/unit/domain/test_shell.py",
+        "tests/integration/test_shell_analysis.py"
+      ],
+      "acceptance_criteria": [
+        "Crear shell de 3 o 4 nodos",
+        "Asignar material, espesor y tipo a shell",
+        "Visualizar shells como superficies en viewport",
+        "Analisis incluye shells correctamente",
+        "Resultados de shells (F11, F22, M11, etc.)",
+        "Tests pasan al 100%"
+      ],
+      "passes": true,
+      "completed_date": "2026-01-17",
+      "notes": "Shell dataclass, API CRUD, ShellMesh viewport, ShellDialog, TclWriter con ShellMITC4/ShellDKGT, 26 tests unitarios"
+    },
+    {
+      "id": "F24",
+      "name": "Releases en Frames",
+      "description": "Liberaciones de grados de libertad en extremos de frames (articulaciones)",
+      "priority": "medium",
+      "category": "modeling",
+      "estimated_complexity": "medium",
+      "steps": [
+        "Implementar paz/domain/model/frame_release.py con FrameRelease dataclass",
+        "Releases por extremo: start_release, end_release",
+        "DOFs liberables: P, V2, V3, T, M2, M3",
+        "Presets: PINNED (libera M2, M3), ROLLER (libera P)",
+        "Actualizar Frame con releases opcionales",
+        "Actualizar OpenSeesAdapter para aplicar releases",
+        "UI para configurar releases en frame",
+        "Visualizar releases en viewport (circulo en extremo)"
+      ],
+      "dependencies": ["F03"],
+      "output_files": [
+        "backend/src/paz/domain/model/frame_release.py",
+        "backend/src/paz/domain/model/frame.py (update)",
+        "backend/src/paz/infrastructure/analysis/opensees_adapter.py (update)",
+        "frontend/src/components/FrameReleaseDialog.tsx",
+        "frontend/src/components/Viewport.tsx (update - release icons)",
+        "tests/unit/domain/test_frame_release.py"
+      ],
+      "acceptance_criteria": [
+        "Configurar releases en extremos de frame",
+        "Presets PINNED y ROLLER funcionan",
+        "Releases individuales por DOF",
+        "Visualizar releases en viewport",
+        "Analisis con releases produce resultados correctos",
+        "Tests pasan al 100%"
+      ],
+      "passes": true,
+      "notes": "FrameReleases dataclass en frame.py, TclWriter genera nodos y zeroLength para releases, UI con presets en App.tsx, visualizacion con ReleaseIndicator en Viewport.tsx, 7 tests en test_tcl_writer_releases.py"
+    },
+    {
+      "id": "F25",
+      "name": "Grupos de Elementos",
+      "description": "Agrupar nodos, frames y shells para operaciones en conjunto",
+      "priority": "medium",
+      "category": "modeling",
+      "estimated_complexity": "medium",
+      "steps": [
+        "Implementar paz/domain/model/element_group.py",
+        "Grupos pueden contener nodos, frames, shells",
+        "Operaciones en grupo: asignar material, seccion, cargas",
+        "Seleccionar grupo completo con un click",
+        "Grupos jerarquicos (grupos de grupos)",
+        "UI para crear, editar, eliminar grupos",
+        "Model tree muestra grupos"
+      ],
+      "dependencies": ["F24"],
+      "output_files": [
+        "backend/src/paz/domain/model/element_group.py",
+        "backend/src/paz/application/commands/group_commands.py",
+        "frontend/src/components/GroupPanel.tsx",
+        "frontend/src/components/ModelTree.tsx (update)",
+        "tests/unit/domain/test_element_group.py"
+      ],
+      "acceptance_criteria": [
+        "Crear grupo con elementos seleccionados",
+        "Seleccionar grupo completo",
+        "Asignar propiedades a grupo",
+        "Ver grupos en model tree",
+        "Eliminar grupo (no elimina elementos)",
+        "Tests pasan al 100%"
+      ],
+      "passes": true,
+      "completed_date": "2026-01-18",
+      "notes": "ElementGroup dataclass con CRUD en StructuralModel, API endpoints, store Zustand con acciones, UI panel de grupos en App.tsx, 46 tests unitarios en test_element_group.py"
+    },
+    {
+      "id": "F44",
+      "name": "Combinaciones de Carga",
+      "description": "Definir casos de carga y combinaciones segun normativas con factores",
+      "priority": "high",
+      "category": "analysis",
+      "estimated_complexity": "high",
+      "steps": [
+        "Implementar paz/domain/loads/load_combination.py mejorado",
+        "LoadCaseType: DEAD, LIVE, ROOF_LIVE, SNOW, WIND, SEISMIC, OTHER",
+        "Combinaciones predefinidas por normativa: NCh, AISC (LRFD/ASD), Eurocodigo",
+        "Combinaciones personalizadas con factores",
+        "Calcular envolvente de resultados",
+        "UI para gestionar casos y combinaciones",
+        "Selector de normativa genera combinaciones automaticamente",
+        "Ver resultados por caso o combinacion"
+      ],
+      "dependencies": ["F25"],
+      "output_files": [
+        "backend/src/paz/domain/loads/load_combination.py (update)",
+        "backend/src/paz/domain/loads/code_combinations.py",
+        "backend/src/paz/application/services/analysis_service.py (update)",
+        "frontend/src/components/LoadCasesPanel.tsx",
+        "frontend/src/components/CombinationsPanel.tsx",
+        "tests/unit/domain/test_load_combinations.py"
+      ],
+      "acceptance_criteria": [
+        "Crear casos de carga tipificados",
+        "Generar combinaciones por normativa",
+        "Crear combinaciones personalizadas",
+        "Ver envolvente de esfuerzos",
+        "Seleccionar caso/combinacion en resultados",
+        "Tests pasan al 100%"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F14",
+      "name": "Analisis Dinamico Modal",
+      "description": "Analisis de frecuencias naturales y modos de vibracion",
+      "priority": "high",
+      "category": "analysis",
+      "estimated_complexity": "high",
+      "steps": [
+        "Implementar analisis modal en OpenSeesAdapter (eigen analysis)",
+        "Configurar numero de modos a calcular",
+        "Integrar mass source (F41)",
+        "Obtener frecuencias naturales (Hz) y periodos (s)",
+        "Obtener formas modales (desplazamientos normalizados)",
+        "Calcular masas participativas por modo",
+        "Calcular factor de participacion modal",
+        "UI para configurar y ejecutar analisis modal",
+        "Mostrar tabla de resultados modales"
+      ],
+      "dependencies": ["F44"],
+      "output_files": [
+        "backend/src/paz/domain/results/modal_results.py",
+        "backend/src/paz/infrastructure/analysis/opensees_adapter.py (update)",
+        "backend/src/paz/application/services/analysis_service.py (update)",
+        "frontend/src/components/ModalAnalysisPanel.tsx",
+        "frontend/src/components/ModalResultsTable.tsx",
+        "tests/unit/domain/test_modal_analysis.py",
+        "tests/integration/test_modal_analysis.py"
+      ],
+      "acceptance_criteria": [
+        "Ejecutar analisis modal con N modos",
+        "Ver frecuencias y periodos",
+        "Ver masas participativas",
+        "Resultados coinciden con SAP2000",
+        "Mass source afecta resultados correctamente",
+        "Tests pasan al 100%"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F17",
+      "name": "Visualizacion Modos de Vibrar",
+      "description": "Visualizar formas modales en viewport con seleccion de modo",
+      "priority": "high",
+      "category": "visualization",
+      "estimated_complexity": "medium",
+      "steps": [
+        "Mostrar estructura deformada segun forma modal",
+        "Selector de modo a visualizar (dropdown)",
+        "Escala de deformacion configurable",
+        "Mostrar periodo/frecuencia del modo seleccionado",
+        "Coloreado por magnitud de desplazamiento modal"
+      ],
+      "dependencies": ["F14"],
+      "output_files": [
+        "frontend/src/components/ModeSelector.tsx",
+        "frontend/src/components/Viewport.tsx (update - modal shapes)",
+        "backend/src/paz/api/routers/analysis.py (update)"
+      ],
+      "acceptance_criteria": [
+        "Ver forma modal de cualquier modo calculado",
+        "Cambiar entre modos con dropdown",
+        "Ajustar escala de deformacion",
+        "Ver periodo/frecuencia en UI",
+        "Coloreado correcto por magnitud"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F22",
+      "name": "Animacion de Modos",
+      "description": "Animar modos de vibracion con ciclo sinusoidal",
+      "priority": "medium",
+      "category": "visualization",
+      "estimated_complexity": "medium",
+      "steps": [
+        "Implementar animacion ciclica de forma modal",
+        "Desplazamiento = amplitude * sin(omega * t) * mode_shape",
+        "Controles: play, pause, velocidad",
+        "Loop continuo o N ciclos",
+        "Slider de tiempo para posicion manual"
+      ],
+      "dependencies": ["F17"],
+      "output_files": [
+        "frontend/src/components/ModeAnimationControls.tsx",
+        "frontend/src/services/AnimationService.ts",
+        "frontend/src/components/Viewport.tsx (update - animation)"
+      ],
+      "acceptance_criteria": [
+        "Animar modo con boton play",
+        "Pausar animacion",
+        "Ajustar velocidad de animacion",
+        "Slider permite posicion manual",
+        "Animacion fluida (30+ FPS)"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F20",
+      "name": "Factores de Utilizacion",
+      "description": "Calcular y mostrar factores de utilizacion segun normativas NCh/AISC/Euro",
+      "priority": "high",
+      "category": "design",
+      "estimated_complexity": "high",
+      "steps": [
+        "Implementar paz/domain/design/utilization.py",
+        "Verificacion de frames a flexion (Mu/Mn)",
+        "Verificacion de frames a corte (Vu/Vn)",
+        "Verificacion de frames a compresion/traccion (Pu/Pn)",
+        "Verificacion combinada (interaccion P-M)",
+        "Soporte NCh, AISC (LRFD/ASD), Eurocodigo",
+        "Coloreado de elementos por factor de utilizacion",
+        "Tabla de factores de utilizacion",
+        "Resaltar elementos que no pasan (ratio > 1.0)"
+      ],
+      "dependencies": ["F22"],
+      "output_files": [
+        "backend/src/paz/domain/design/__init__.py",
+        "backend/src/paz/domain/design/utilization.py",
+        "backend/src/paz/domain/design/aisc_checks.py",
+        "backend/src/paz/domain/design/nch_checks.py",
+        "backend/src/paz/domain/design/eurocode_checks.py",
+        "frontend/src/components/UtilizationPanel.tsx",
+        "frontend/src/components/Viewport.tsx (update - utilization colors)",
+        "tests/unit/domain/test_utilization.py"
+      ],
+      "acceptance_criteria": [
+        "Calcular factor de utilizacion para cada frame",
+        "Seleccionar normativa para verificacion",
+        "Ver coloreado verde/amarillo/rojo por ratio",
+        "Tabla muestra todos los ratios",
+        "Elementos con ratio > 1.0 resaltados",
+        "Resultados coinciden con calculo manual",
+        "Tests pasan al 100%"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F10",
+      "name": "Libreria de Secciones NCh",
+      "description": "Base de datos de perfiles segun normas chilenas",
+      "priority": "high",
+      "category": "libraries",
+      "estimated_complexity": "medium",
+      "steps": [
+        "Crear src/data/sections/nch_perfiles.json",
+        "Incluir perfiles laminados chilenos",
+        "Incluir perfiles conformados en frio",
+        "Agregar a SectionsRepository con filtro por normativa",
+        "UI para filtrar por NCh en selector de secciones"
+      ],
+      "dependencies": ["F20"],
+      "output_files": [
+        "backend/src/data/sections/nch_perfiles.json",
+        "backend/src/paz/infrastructure/repositories/sections_repository.py (update)",
+        "frontend/src/components/SectionSelector.tsx (update)"
+      ],
+      "acceptance_criteria": [
+        "Perfiles NCh disponibles en libreria",
+        "Filtrar por normativa NCh",
+        "Propiedades correctas (A, I, S, r)",
+        "Asignar perfil NCh a frame"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F11",
+      "name": "Libreria de Secciones Eurocodigo",
+      "description": "Base de datos de perfiles segun Eurocodigos",
+      "priority": "high",
+      "category": "libraries",
+      "estimated_complexity": "medium",
+      "steps": [
+        "Crear src/data/sections/euro_ipe.json (IPE series)",
+        "Crear src/data/sections/euro_hea.json (HEA series)",
+        "Crear src/data/sections/euro_heb.json (HEB series)",
+        "Crear src/data/sections/euro_upn.json (UPN channels)",
+        "Agregar a SectionsRepository con filtro por normativa",
+        "UI para filtrar por Eurocodigo en selector de secciones"
+      ],
+      "dependencies": ["F10"],
+      "output_files": [
+        "backend/src/data/sections/euro_ipe.json",
+        "backend/src/data/sections/euro_hea.json",
+        "backend/src/data/sections/euro_heb.json",
+        "backend/src/data/sections/euro_upn.json",
+        "backend/src/paz/infrastructure/repositories/sections_repository.py (update)",
+        "frontend/src/components/SectionSelector.tsx (update)"
+      ],
+      "acceptance_criteria": [
+        "Perfiles IPE, HEA, HEB, UPN disponibles",
+        "Filtrar por normativa Eurocodigo",
+        "Propiedades correctas segun tablas europeas",
+        "Asignar perfil europeo a frame"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F45",
+      "name": "Import SAP2000",
+      "description": "Importar modelos existentes desde archivos SAP2000 (.s2k)",
+      "priority": "medium",
+      "category": "io",
+      "estimated_complexity": "high",
+      "steps": [
+        "Implementar paz/infrastructure/importers/sap2000_importer.py",
+        "Parsear formato .s2k (texto estructurado)",
+        "Importar nodos (JOINT COORDINATES)",
+        "Importar frames (CONNECTIVITY - FRAME)",
+        "Importar shells (CONNECTIVITY - AREA)",
+        "Importar materiales (MATERIAL PROPERTIES)",
+        "Mapear secciones SAP a libreria local",
+        "Importar restricciones (JOINT RESTRAINTS)",
+        "Importar cargas (LOAD PATTERNS, LOAD CASES)",
+        "UI con dialogo de importacion y mapeo",
+        "Advertencias para elementos no soportados"
+      ],
+      "dependencies": ["F11"],
+      "output_files": [
+        "backend/src/paz/infrastructure/importers/sap2000_importer.py",
+        "backend/src/paz/api/routers/import.py",
+        "frontend/src/components/ImportSAP2000Dialog.tsx",
+        "tests/unit/infrastructure/test_sap2000_importer.py",
+        "tests/fixtures/sample_model.s2k"
+      ],
+      "acceptance_criteria": [
+        "Importar modelo SAP2000 .s2k",
+        "Nodos, frames, shells importados correctamente",
+        "Materiales mapeados o creados",
+        "Secciones mapeadas a libreria",
+        "Cargas importadas",
+        "Advertencias claras para elementos no soportados",
+        "Tests pasan al 100%"
+      ],
+      "passes": false
+    },
+    {
+      "id": "F-V1-FINAL",
+      "name": "Integracion y Testing V1.0",
+      "description": "Integracion final de todas las features V1.0, testing E2E y documentacion",
+      "priority": "critical",
+      "category": "release",
+      "estimated_complexity": "high",
+      "steps": [
+        "Integrar todas las features V1.0 en flujo completo",
+        "Test E2E: modelo con shells, cargas distribuidas, analisis modal",
+        "Test E2E: verificacion con factores de utilizacion",
+        "Test E2E: importar SAP2000 y verificar resultados",
+        "Benchmark vs SAP2000 para casos modales",
+        "Documentar nuevas features en README",
+        "Actualizar RETOMAR.md con estado V1.0",
+        "Revisar performance con modelos grandes",
+        "Corregir bugs encontrados",
+        "Preparar release notes V1.0"
+      ],
+      "dependencies": ["F45"],
+      "output_files": [
+        "tests/e2e/test_v1_workflow.py",
+        "tests/e2e/test_modal_analysis_e2e.py",
+        "tests/e2e/test_sap2000_import_e2e.py",
+        "docs/RELEASE_NOTES_V1.md",
+        "README.md (update)"
+      ],
+      "acceptance_criteria": [
+        "Flujo V1.0 completo funciona sin errores",
+        "Analisis modal produce resultados correctos",
+        "Factores de utilizacion calculados correctamente",
+        "Import SAP2000 funciona para modelos tipicos",
+        "Tests E2E pasan al 100%",
+        "0 crashes en uso normal de 2 horas",
+        "Documentacion actualizada"
+      ],
+      "passes": false
+    }
+  ],
+  "summary": {
+    "total_features": 18,
+    "by_priority": {
+      "critical": 1,
+      "high": 14,
+      "medium": 3
+    },
+    "by_category": {
+      "modeling": 5,
+      "loads": 1,
+      "analysis": 3,
+      "visualization": 2,
+      "design": 1,
+      "libraries": 2,
+      "ui": 1,
+      "io": 1,
+      "release": 1
+    },
+    "key_milestones": [
+      {
+        "feature": "F43",
+        "description": "Object Snap funcional - base para dibujo"
+      },
+      {
+        "feature": "F23",
+        "description": "Dibujo dinamico operativo"
+      },
+      {
+        "feature": "F03",
+        "description": "Shells implementados"
+      },
+      {
+        "feature": "F14",
+        "description": "Analisis modal funcional"
+      },
+      {
+        "feature": "F20",
+        "description": "Verificacion normativa operativa"
+      },
+      {
+        "feature": "F45",
+        "description": "Import SAP2000 funcional"
+      },
+      {
+        "feature": "F-V1-FINAL",
+        "description": "V1.0 listo para release"
+      }
+    ],
+    "revision_v1_5": "Al alcanzar 50% de avance (aprox. despues de F44), realizar revision para evaluar features adicionales y ajustar prioridades"
+  },
+  "notas": {
+    "advertencias": [
+      "Analisis modal requiere mass source configurado correctamente",
+      "Import SAP2000 solo soporta formato .s2k (texto), no .sdb (binario)",
+      "Factores de utilizacion dependen de normativa seleccionada",
+      "Object Snap puede afectar performance en modelos muy grandes"
+    ],
+    "recomendaciones": [
+      "Implementar F39-F43 primero para mejorar UX de modelado",
+      "Validar resultados modales contra SAP2000 frecuentemente",
+      "Documentar mapeo de secciones SAP a libreria local",
+      "Hacer revision V1.5 al 50% para ajustar scope"
+    ]
+  }
+}

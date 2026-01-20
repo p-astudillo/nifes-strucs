@@ -1,10 +1,10 @@
-# Brief del Proyecto - PAZ
+# Brief del Proyecto - NIFES STRUCS
 
 **Software Profesional de Analisis Estructural**
 
-Documento: Brief v1.1 (Consolidado)
-Fecha: 2026-01-03
-Fase: 6.0 - Consolidacion Final
+Documento: Brief v2.0
+Fecha: 2026-01-13
+Fase: 7.0 - Definicion V1.0
 
 ---
 
@@ -12,11 +12,11 @@ Fase: 6.0 - Consolidacion Final
 
 ### 1.1 Declaracion de Vision
 
-**PAZ** sera el software de analisis estructural de referencia en Latinoamerica: una herramienta profesional, moderna y economicamente accesible que democratiza el acceso a tecnologia de ingenieria estructural de clase mundial.
+**NIFES STRUCS** sera el software de analisis estructural de referencia en Latinoamerica: una herramienta profesional, moderna y economicamente accesible que democratiza el acceso a tecnologia de ingenieria estructural de clase mundial.
 
 ### 1.2 Propuesta de Valor Unica
 
-| Problema del Mercado                                         | Solucion PAZ                                                                                 |
+| Problema del Mercado                                         | Solucion NIFES STRUCS                                                                                 |
 |--------------------------------------------------------------|----------------------------------------------------------------------------------------------|
 | Licencias prohibitivas ($5,000-$15,000 USD/ano)              | Precio accesible para mercado Latam                                                         |
 | Normativas regionales y europeas dispersas y costosas        | Soporte nativo NCh (Chile), AISC (estandar general) y Eurocodigos desde el primer alfa       |
@@ -86,13 +86,18 @@ Fase: 6.0 - Consolidacion Final
 #### V1.0 (6-12 meses)
 | Categoria | Features |
 |-----------|----------|
-| **Modelacion** | Shells, releases, grupos, dibujo dinamico, grillas avanzadas y Section Designer para secciones no estandar |
-| **Librerias** | Cobertura completa NCh y Eurocodigos, actualizacion constante de AISC, secciones mixtas en librerias parametricas |
-| **Analisis** | Dinamico, modos de vibrar, combinaciones automatizadas y selector de motor (OpenSees/Kratos) con validacion cruzada |
-| **Visualizacion** | Animacion de modos, coloreado por componentes, overlay de grillas y paneles de resultados sincronizados |
+| **Modelacion** | Shells, releases, grupos, dibujo dinamico con puntero y object snap, grillas dibujables interactivamente |
+| **Nodos** | Tipos de apoyo: empotrado, rotulado, libre horizontal/fijo Z, personalizados por DOF |
+| **Frames** | Asignacion individual de secciones/materiales, masa automatica (material × area) |
+| **Cargas** | Lineales, de area, area a frame, triangulares, trapezoidales; selector de mass source |
+| **Librerias** | Cobertura completa NCh y Eurocodigos, actualizacion constante de AISC, secciones mixtas |
+| **Analisis** | Dinamico, modos de vibrar, combinaciones automatizadas; modo dibujo vs modo analisis (play/pause) |
+| **Visualizacion** | Animacion de modos, toggle deformadas/diagramas en viewport, coloreado por esfuerzo |
 | **Verificacion** | Factores de utilizacion y chequeos normativos para NCh/AISC/Euro |
-| **Interoperabilidad** | Mejora del importador AutoCAD, exportador a SAP y flujo de conversiones de unidades estilo Mathcad/SAP |
-| **Plataforma** | macOS en beta + mejoras del stack cloud y pipelines de build |
+| **Interoperabilidad** | Import desde SAP2000/AutoCAD mejorado, conversiones de unidades estilo Mathcad |
+| **Plataforma** | macOS en beta + mejoras del stack cloud |
+
+**Nota V1.5**: Al alcanzar 50% de avance del V1.0, se realizara una revision para evaluar features adicionales y ajustar prioridades.
 
 #### V2.0 (12-18 meses)
 | Categoria | Features |
@@ -322,9 +327,10 @@ Se mantiene el foco en el analisis; las funcionalidades de diseno estructural o 
 
 ---
 
-## 11. Pendientes Estrategicos
+## 11. Decisiones de Marca
 
-- Nombre del producto o modulo: "Nifes Forge" sigue en duda; evaluar alternativas como "Structural Forge" y definir si se lanza dentro o fuera de la marca Nifes.
+- **Nombre definitivo**: NIFES STRUCS
+- El producto se lanza dentro de la marca Nifes como la linea de software de analisis estructural.
 
 ## Anexos
 

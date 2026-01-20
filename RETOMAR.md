@@ -5,164 +5,186 @@
 ---
 
 ## PROYECTO
-**Nombre**: PAZ (Software Profesional de Análisis Estructural)
-**Estado**: en progreso
-**Última actividad**: 2026-01-11 11:30
+**Nombre**: NIFES STRUCS (Software Profesional de Analisis Estructural)
+**Estado**: en progreso (V1.0 - 9/18 features - 50%)
+**Ultima actividad**: 2026-01-19 20:30
 
 ---
 
 ## LEER PRIMERO
 
 1. `CLAUDE.md` - Instrucciones y reglas del proyecto
-2. `ARQUITECTURA.md` - Stack técnico y estructura
-3. `BRIEF.md` - Visión y objetivos
+2. `PRD.md` - Product Requirements Document (v2.0)
+3. `BRIEF.md` - Vision y objetivos del proyecto
+4. `feature_list_v1.json` - Lista de 18 features V1.0
 
 ---
 
 ## ESTADO ACTUAL
 
-**Modo**: automático (feature_list.json)
-**Progreso**: 16/18 features completadas (89%)
-**Tests**: ~500 tests pasando
+**Modo**: automatico (feature_list_v1.json)
+**Progreso**: 9/18 features V1.0 completadas (50%)
 
-| Feature | Nombre | Estado |
-|---------|--------|--------|
-| F00 | Setup del Proyecto | ✅ |
-| F31 | Gestión de Proyectos | ✅ |
-| F01 | Modelación de Nodos | ✅ |
-| F08 | Librería de Materiales | ✅ |
-| F09 | Librería de Secciones AISC | ✅ |
-| F12 | Perfiles Parametrizados | ✅ |
-| F02 | Modelación de Frames | ✅ |
-| F13 | Análisis Estático Lineal | ✅ |
-| F18 | Visualización Desplazamientos | ✅ |
-| F19 | Visualización Esfuerzos | ✅ |
-| F21 | Perfiles Extruidos | ✅ |
-| F35 | Sistema de Grillas | ✅ |
-| F33 | Export/Import | ✅ |
-| F36 | Section Designer | ✅ |
-| F37 | Conversor de Unidades | ✅ |
-| F38 | Compatibilidad macOS | ✅ |
-| F-UI | Interfaz Usuario | 🔄 en progreso |
-| F-FINAL | Integración Final | ❌ pendiente |
+### Proxima tarea
+**F44 - Combinaciones de Carga**: Casos de carga tipificados (DEAD, LIVE, SEISMIC), combinaciones por normativa (NCh, AISC, Eurocodigo), envolventes de resultados.
 
-### Última sesión (2026-01-11 11:30)
+---
 
-**F-UI - Interfaz de Usuario (continuación):**
+## BITACORA DE SESIONES
 
-1. **Diálogos de Nodos y Frames**
-   - `presentation/dialogs/node_dialog.py` - NodeDialog
-     - Edición de coordenadas X, Y, Z
-     - Configuración de restraints con presets (Free, Fixed, Pinned, Roller)
-     - Checkboxes individuales para cada DOF
-   - `presentation/dialogs/frame_dialog.py` - FrameDialog
-     - Selector de material (abre MaterialDialog)
-     - Selector de sección (abre SectionDialog)
-     - Rotación en grados
-     - Releases con presets (Fixed-Fixed, Pinned-Pinned, etc.)
-     - Label opcional
+### Sesion 2026-01-19 (20:00 - 20:30)
 
-2. **Menús completos en MainWindow**
-   - **File**: New, Open, Save, Save As, Exit
-   - **Edit**: Undo, Redo, Delete, Select All
-   - **View**: Reset View
-   - **Model**: Add Node, Add Frame, Materials, Sections
-   - **Analysis**: Run Analysis (F5), View Results
+**Problema**: Los diagramas de momento no se visualizaban correctamente.
 
-3. **Shortcuts de teclado**
-   - Ctrl+Shift+N: Add Node dialog
-   - Ctrl+Shift+F: Add Frame dialog
-   - F5: Run Analysis
-   - Delete, Ctrl+A, Ctrl+Z, Ctrl+Y, etc.
+**Diagnostico**:
+1. OpenSees con `elasticBeamColumn` solo devuelve fuerzas en los **extremos** del elemento (nodo i y j)
+2. La interpolacion inicial tenia errores matematicos
+3. El vector perpendicular para visualizacion estaba mal calculado para frames verticales
+4. Los valores de momento tenian signo incorrecto para visualizacion
 
-### Sesión anterior (2026-01-10 18:30)
+**Solucion implementada**:
 
-**4 Features completadas:**
+1. **Backend - Interpolacion analitica** (`analysis_service.py`):
+   - Funcion `_enrich_frame_results_with_diagrams()` calcula 21 puntos intermedios
+   - Usa la relacion fundamental: **dM/dx = V**
+   - Formula: `M(x) = M_i + V_i*x + (V_j - V_i)*x²/(2L)`
+   - Esto es **exacto** para analisis lineal elastico (no es aproximacion)
 
-1. **F33 - Export/Import** (34 tests)
-   - `infrastructure/exporters/csv_exporter.py` - CSVExporter, ResultsExporter
-   - `infrastructure/importers/csv_importer.py` - CSVImporter
-   - `infrastructure/importers/dxf_importer.py` - DXFImporter (AutoCAD)
+2. **Backend - Valores con signo** (`frame_results.py`):
+   - `V_max`, `M_max` ahora devuelven el valor con signo (max por valor absoluto)
+   - Antes: `max(abs(f.M2) for f in forces)` = 75
+   - Ahora: `max((f.M2 for f in forces), key=abs)` = -75
 
-2. **F36 - Section Designer** (20 tests)
-   - `domain/sections/section_designer.py` - SectionDesigner, SectionRegion
+3. **Frontend - Visualizacion** (`Viewport.tsx`):
+   - Vector perpendicular: vertical (Y) para vigas, hacia observador (Z) para columnas
+   - Momento negado para dibujar del lado de tension (convencion de ingenieria)
 
-3. **F37 - Conversor de Unidades** (35 tests)
-   - `core/units.py` ampliado con conversiones adicionales
+4. **Backend - CORS** (`main.py`):
+   - Agregados puertos 3002, 3003 a origenes permitidos
 
-4. **F38 - Compatibilidad macOS** (19 tests)
-   - `core/platform.py` - Detección de plataforma y dependencias
+**Decision tecnica importante**:
+> Para analisis lineal elastico, la interpolacion matematica M = M_i + integral(V)dx es **exacta**.
+> No es necesario dividir elementos o usar puntos de integracion adicionales de OpenSees.
+> Esto seria diferente para analisis no-lineal donde la distribucion de fuerzas no sigue la teoria elastica.
 
-### Próxima tarea
-- **F-UI (continuar)**: Property panel mejorado, Model tree mejorado
-- **F-FINAL**: Integración final del MVP
+**Archivos modificados**:
+- `backend/src/paz/application/services/analysis_service.py` - Interpolacion analitica
+- `backend/src/paz/infrastructure/engines/results_parser.py` - Solo extremos
+- `backend/src/paz/domain/results/frame_results.py` - Valores con signo
+- `backend/src/paz/api/main.py` - CORS ports
+- `frontend/src/components/Viewport.tsx` - Vector perpendicular y signo momento
+
+---
+
+### Sesion 2026-01-18
+
+**Features completadas:**
+- F24 - Releases en Frames (TclWriter con zeroLength, UI presets, 7 tests)
+- F25 - Grupos de Elementos (ElementGroup dataclass, API CRUD, store, UI, 46 tests)
+
+**Bugs arreglados en revision 50%:**
+
+| Bug | Solucion |
+|-----|----------|
+| Esfuerzos frames mostraban 0 | V_max y M_max ahora incluyen V2/V3 y M2/M3 (ambos ejes locales) |
+| Sin visualizacion de reacciones | Agregado ReactionArrow component con flechas verdes en 3D |
+| Unidades solo cambian etiquetas | Implementado UnitService.ts con conversion bidireccional real |
+| Falta boton carga distribuida | Agregado boton "+ Dist." en toolbar |
+| Cargas dist. no visibles en sidebar | Agregado visor de cargas distribuidas con valores |
+| No se puede cambiar seccion a frames | Agregado selector material/seccion en panel propiedades |
 
 ---
 
 ## DECISIONES IMPORTANTES
 
-| Decisión | Valor | Razón |
-|----------|-------|-------|
-| Arquitectura | Cloud-first (SaaS) | Sin instalación, suscripción |
-| Motor de cálculo | OpenSees (binario) | Mac ARM compatible via subprocess |
-| Backend | Python 3.12 + FastAPI | Compatible con openseespy |
-| Desktop UI | PySide6 + PyVista | Visualización 3D robusta |
-| Unidades internas | SI (m, kN, kPa) | Consistencia |
-| Ejes locales frames | Convención SAP2000 | Estándar industria |
-| Formato proyecto | .paz (JSON + gzip) | Portabilidad |
+1. **Nombre**: NIFES STRUCS (marca Nifes)
+2. **Motor calculo**: OpenSees binario (no openseespy) - funciona en Mac ARM
+3. **Arquitectura**: Cloud-first (React + FastAPI)
+4. **Unidades internas**: Siempre SI (m, kN) - conversion solo para display
+5. **Normativas**: NCh, AISC, Eurocodigos
+6. **Diagramas de momento**: Interpolacion analitica exacta (dM/dx = V), no requiere subdividir elementos
+7. **Convencion de signos**: Momento se muestra del lado de tension (negado en visualizacion)
 
 ---
 
-## ARCHIVOS MODIFICADOS (SESIÓN ACTUAL)
+## CONVERSION DE UNIDADES
 
-```
-backend/src/paz/presentation/
-├── dialogs/
-│   ├── __init__.py           # MODIFICADO - exports 4 dialogs
-│   ├── frame_dialog.py       # NUEVO - diálogo edición frames
-│   ├── material_dialog.py    # diálogo selección materiales
-│   ├── node_dialog.py        # NUEVO - diálogo edición nodos
-│   └── section_dialog.py     # diálogo selección secciones
-└── main_window.py            # MODIFICADO - menús completos, Analysis
+El sistema soporta conversion real de unidades:
 
-backend/tests/unit/presentation/dialogs/
-├── __init__.py
-├── test_material_dialog.py
-└── test_section_dialog.py
+```typescript
+// Unidades base (internas): m, kN
+// Unidades display: configurable por usuario
+
+// Al MOSTRAR valores:
+lengthFromBase(valor_en_m, units.length)  // m -> ft/in/cm/mm
+forceFromBase(valor_en_kN, units.force)   // kN -> kip/lbf/N/tonf
+
+// Al INGRESAR valores:
+lengthToBase(valor_input, units.length)   // ft/in/cm/mm -> m
+forceToBase(valor_input, units.force)     // kip/lbf/N/tonf -> kN
 ```
+
+Archivo: `frontend/src/services/UnitService.ts`
 
 ---
 
-## CÓMO CONTINUAR
+## FEATURES V1.0
 
-### Ejecutar la aplicación:
+### Completadas (9/18)
+| ID | Feature | Fecha |
+|----|---------|-------|
+| F39 | Tipos de Apoyo Avanzados | 2026-01-13 |
+| F40 | Cargas Avanzadas | 2026-01-16 |
+| F41 | Mass Source y Masa Automatica | 2026-01-16 |
+| F42 | Modo Dibujo/Analisis | 2026-01-16 |
+| F43 | Object Snap | 2026-01-16 |
+| F23 | Dibujo Dinamico | 2026-01-16 |
+| F03 | Shells (losas, muros) | 2026-01-17 |
+| F24 | Releases en Frames | 2026-01-18 |
+| F25 | Grupos de Elementos | 2026-01-18 |
+
+### Pendientes (9/18)
+| # | ID | Feature | Complejidad |
+|---|-----|---------|-------------|
+| 10 | F44 | Combinaciones de Carga | Alta |
+| 11 | F14 | Analisis Dinamico Modal | Alta |
+| 12 | F17 | Visualizacion Modos | Media |
+| 13 | F22 | Animacion de Modos | Media |
+| 14 | F20 | Factores de Utilizacion | Alta |
+| 15 | F10 | Secciones NCh | Media |
+| 16 | F11 | Secciones Eurocodigo | Media |
+| 17 | F45 | Import SAP2000 | Alta |
+| 18 | F-V1-FINAL | Integracion V1.0 | Alta |
+
+---
+
+## COMO CONTINUAR
+
+### Comandos frecuentes
 ```bash
-cd backend
-source .venv/bin/activate
-python -m paz          # GUI desktop (defecto)
-python -m paz --api    # Solo servidor API
+# Backend
+cd backend && uvicorn src.paz.api.main:app --reload --port 8000
+
+# Frontend
+cd frontend && npm run dev
+
+# Tests
+cd backend && python3 -m pytest
 ```
 
-### Verificar estado:
-```bash
-cd backend
-source .venv/bin/activate
-pytest tests/ -v
-```
+### Para implementar F44 (Combinaciones de Carga)
+1. Crear `LoadCaseType` enum: DEAD, LIVE, WIND, SEISMIC, etc.
+2. Crear presets por normativa en `code_combinations.py`
+3. Actualizar AnalysisService para multiples casos
+4. UI para gestionar casos y combinaciones
+5. Calcular envolventes de resultados
+6. Tests unitarios
 
-### Para siguiente feature:
-1. Continuar con F-UI o F-FINAL
-2. Implementar según criterios de aceptación
-3. Crear tests unitarios
-4. Actualizar RETOMAR.md
+### Flujo general V1.0
+1. Implementar features en orden del feature_list_v1.json
+2. Al 100% -> F-V1-FINAL para integracion
 
 ---
 
-## REPOSITORIO
-
-- **GitHub**: https://github.com/p-astudillo/nifes-strucs
-- **Branch**: main
-
----
-
-*Generado: 2026-01-11 11:30*
+*Generado: 2026-01-19 20:30*
+*Proyecto: NIFES STRUCS V1.0*

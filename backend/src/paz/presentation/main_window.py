@@ -21,21 +21,20 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QStatusBar,
     QToolBar,
-    QTreeWidget,
-    QTreeWidgetItem,
-    QVBoxLayout,
-    QWidget,
 )
 
 from paz.application.commands import CreateNodeCommand, CreateFrameCommand
-from paz.application.services import UndoRedoService
+from paz.application.services import AnalysisService, UndoRedoService
 from paz.core.grid_config import GridConfig
+from paz.domain.loads import LoadCase, LoadCaseType, NodalLoad
+from paz.domain.results import AnalysisResults
 from paz.domain.model import StructuralModel
 from paz.domain.model.project import Project, ProjectFile
 from paz.infrastructure.repositories.file_repository import FileRepository
 from paz.infrastructure.repositories.materials_repository import MaterialsRepository
 from paz.infrastructure.repositories.sections_repository import SectionsRepository
 from paz.presentation.dialogs import FrameDialog, MaterialDialog, NodeDialog, SectionDialog
+from paz.presentation.panels import ModelTreeWidget, PropertyPanel, ResultsPanel
 from paz.presentation.viewport import ViewportWidget
 
 
@@ -90,6 +89,10 @@ class MainWindow(QMainWindow):
         self._file_repository = FileRepository()
         self._materials_repository = MaterialsRepository()
         self._sections_repository = SectionsRepository()
+
+        # Analysis service and results
+        self._analysis_service = AnalysisService()
+        self._analysis_results: AnalysisResults | None = None
 
         # For frame creation: store first node
         self._frame_start_node_id: int | None = None
@@ -278,9 +281,8 @@ class MainWindow(QMainWindow):
         model_dock = QDockWidget("Model", self)
         model_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
 
-        self._model_tree = QTreeWidget()
-        self._model_tree.setHeaderLabels(["Element", "Count"])
-        self._model_tree.setColumnCount(2)
+        self._model_tree = ModelTreeWidget()
+        self._model_tree.set_model(self._model)
         model_dock.setWidget(self._model_tree)
 
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, model_dock)
@@ -289,15 +291,20 @@ class MainWindow(QMainWindow):
         props_dock = QDockWidget("Properties", self)
         props_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
 
-        props_widget = QWidget()
-        props_layout = QVBoxLayout(props_widget)
-        self._props_label = QLabel("Select an element to see properties")
-        self._props_label.setWordWrap(True)
-        props_layout.addWidget(self._props_label)
-        props_layout.addStretch()
-        props_dock.setWidget(props_widget)
+        self._property_panel = PropertyPanel()
+        props_dock.setWidget(self._property_panel)
 
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, props_dock)
+
+        # Results dock (right, below properties)
+        self._results_dock = QDockWidget("Results", self)
+        self._results_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+
+        self._results_panel = ResultsPanel()
+        self._results_dock.setWidget(self._results_panel)
+        self._results_dock.hide()  # Hidden until analysis is run
+
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._results_dock)
 
     def _setup_status_bar(self) -> None:
         """Create the status bar."""
@@ -330,6 +337,18 @@ class MainWindow(QMainWindow):
             callback=self._on_viewport_click,
             side="left",
         )
+
+        # Model tree signals
+        self._model_tree.node_selected.connect(self._on_tree_node_selected)
+        self._model_tree.frame_selected.connect(self._on_tree_frame_selected)
+        self._model_tree.node_double_clicked.connect(self._on_edit_node)
+        self._model_tree.frame_double_clicked.connect(self._on_edit_frame)
+        self._model_tree.delete_node_requested.connect(self._on_delete_node)
+        self._model_tree.delete_frame_requested.connect(self._on_delete_frame)
+
+        # Property panel signals
+        self._property_panel.node_modified.connect(self._on_node_property_changed)
+        self._property_panel.frame_modified.connect(self._on_frame_property_changed)
 
     def _set_tool(self, tool: DrawingTool) -> None:
         """Set the active drawing tool."""
@@ -449,20 +468,17 @@ class MainWindow(QMainWindow):
         """Show properties for selected node."""
         try:
             node = self._model.get_node(node_id)
-            text = (
-                f"Node {node.id}\n\n"
-                f"X: {node.x:.4f} m\n"
-                f"Y: {node.y:.4f} m\n"
-                f"Z: {node.z:.4f} m\n\n"
-                f"Restraint:\n"
-                f"  Ux: {'Fixed' if node.restraint.ux else 'Free'}\n"
-                f"  Uy: {'Fixed' if node.restraint.uy else 'Free'}\n"
-                f"  Uz: {'Fixed' if node.restraint.uz else 'Free'}\n"
-                f"  Rx: {'Fixed' if node.restraint.rx else 'Free'}\n"
-                f"  Ry: {'Fixed' if node.restraint.ry else 'Free'}\n"
-                f"  Rz: {'Fixed' if node.restraint.rz else 'Free'}"
-            )
-            self._props_label.setText(text)
+            self._property_panel.show_node(node)
+            self._model_tree.select_node(node_id)
+        except Exception:
+            pass
+
+    def _show_frame_properties(self, frame_id: int) -> None:
+        """Show properties for selected frame."""
+        try:
+            frame = self._model.get_frame(frame_id)
+            self._property_panel.show_frame(frame)
+            self._model_tree.select_frame(frame_id)
         except Exception:
             pass
 
@@ -483,25 +499,8 @@ class MainWindow(QMainWindow):
 
     def _update_model_tree(self) -> None:
         """Update the model tree widget."""
-        self._model_tree.clear()
-
-        # Nodes
-        nodes_item = QTreeWidgetItem(["Nodes", str(self._model.node_count)])
-        for node in self._model.nodes:
-            node_item = QTreeWidgetItem([f"Node {node.id}", f"({node.x:.2f}, {node.y:.2f}, {node.z:.2f})"])
-            nodes_item.addChild(node_item)
-        self._model_tree.addTopLevelItem(nodes_item)
-
-        # Frames
-        frames_item = QTreeWidgetItem(["Frames", str(self._model.frame_count)])
-        for frame in self._model.frames:
-            frame_item = QTreeWidgetItem([f"Frame {frame.id}", f"{frame.node_i_id} -> {frame.node_j_id}"])
-            frames_item.addChild(frame_item)
-        self._model_tree.addTopLevelItem(frames_item)
-
-        # Expand nodes and frames
-        nodes_item.setExpanded(True)
-        frames_item.setExpanded(True)
+        self._model_tree.set_model(self._model)
+        self._model_tree.update_tree()
 
     def _update_status_bar(self) -> None:
         """Update status bar counts."""
@@ -769,14 +768,184 @@ class MainWindow(QMainWindow):
             return
 
         self._status_bar.showMessage("Running analysis...", 0)
-        # TODO: Integrate with AnalysisService
-        self._status_bar.showMessage("Analysis: Not yet implemented", 3000)
+
+        # Prepare materials and sections dictionaries
+        materials = {m.name: m for m in self._materials_repository.get_all()}
+        sections = {s.name: s for s in self._sections_repository.get_all()}
+
+        # Create default load case (self-weight)
+        load_case = LoadCase(
+            name="Self-Weight",
+            load_type=LoadCaseType.DEAD,
+            self_weight_multiplier=1.0,
+        )
+
+        # Progress callback
+        def on_progress(step: int, total: int, message: str) -> None:
+            self._status_bar.showMessage(f"Analysis: {message} ({step}/{total})", 0)
+
+        try:
+            # Run analysis
+            results = self._analysis_service.analyze(
+                model=self._model,
+                materials=materials,
+                sections=sections,
+                load_case=load_case,
+                nodal_loads=[],
+                distributed_loads=[],
+                progress_callback=on_progress,
+            )
+
+            self._analysis_results = results
+
+            if results.success:
+                self._status_bar.showMessage("Analysis completed successfully", 3000)
+                # Show results panel
+                self._results_panel.set_results(results)
+                self._results_dock.show()
+                # Update viewport to show deformed shape if available
+                self._viewport.set_results(results)
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Analysis Failed",
+                    f"Analysis failed:\n{results.error_message}",
+                )
+                self._status_bar.showMessage("Analysis failed", 3000)
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Analysis Error",
+                f"An error occurred during analysis:\n{e}",
+            )
+            self._status_bar.showMessage("Analysis error", 3000)
 
     @Slot()
     def _on_view_results(self) -> None:
         """View analysis results."""
-        # TODO: Show results panel
-        self._status_bar.showMessage("View Results: Run analysis first", 2000)
+        if self._analysis_results is None:
+            QMessageBox.information(
+                self,
+                "No Results",
+                "No analysis results available.\nRun analysis first (F5).",
+            )
+            return
+
+        # Show results dock if hidden
+        self._results_dock.show()
+        self._results_panel.set_results(self._analysis_results)
+        self._status_bar.showMessage("Viewing results", 2000)
+
+    @Slot(int)
+    def _on_tree_node_selected(self, node_id: int) -> None:
+        """Handle node selection from model tree."""
+        self._show_node_properties(node_id)
+
+    @Slot(int)
+    def _on_tree_frame_selected(self, frame_id: int) -> None:
+        """Handle frame selection from model tree."""
+        self._show_frame_properties(frame_id)
+
+    @Slot(int)
+    def _on_edit_node(self, node_id: int) -> None:
+        """Open dialog to edit an existing node."""
+        try:
+            node = self._model.get_node(node_id)
+            dialog = NodeDialog(self, title=f"Edit Node {node_id}", node=node)
+
+            if dialog.exec() == NodeDialog.DialogCode.Accepted:
+                data = dialog.get_node_data()
+                node.move_to(data["x"], data["y"], data["z"])
+                node.restraint = data["restraint"]
+                self._on_model_changed()
+                self._show_node_properties(node_id)
+                self._status_bar.showMessage(f"Node {node_id} updated", 2000)
+        except Exception as e:
+            self._status_bar.showMessage(f"Error: {e}", 3000)
+
+    @Slot(int)
+    def _on_edit_frame(self, frame_id: int) -> None:
+        """Open dialog to edit an existing frame."""
+        try:
+            frame = self._model.get_frame(frame_id)
+            dialog = FrameDialog(
+                self,
+                materials_repo=self._materials_repository,
+                sections_repo=self._sections_repository,
+                title=f"Edit Frame {frame_id}",
+                frame=frame,
+            )
+
+            if dialog.exec() == FrameDialog.DialogCode.Accepted:
+                frame.material_name = dialog.get_material_name()
+                frame.section_name = dialog.get_section_name()
+                frame.rotation = dialog.get_rotation()
+                frame.releases = dialog.get_releases()
+                frame.label = dialog.get_label()
+                self._on_model_changed()
+                self._show_frame_properties(frame_id)
+                self._status_bar.showMessage(f"Frame {frame_id} updated", 2000)
+        except Exception as e:
+            self._status_bar.showMessage(f"Error: {e}", 3000)
+
+    @Slot(int)
+    def _on_delete_node(self, node_id: int) -> None:
+        """Delete a node from the model."""
+        try:
+            self._model.remove_node(node_id)
+            self._property_panel.clear()
+            self._on_model_changed()
+            self._status_bar.showMessage(f"Node {node_id} deleted", 2000)
+        except Exception as e:
+            self._status_bar.showMessage(f"Error: {e}", 3000)
+
+    @Slot(int)
+    def _on_delete_frame(self, frame_id: int) -> None:
+        """Delete a frame from the model."""
+        try:
+            self._model.remove_frame(frame_id)
+            self._property_panel.clear()
+            self._on_model_changed()
+            self._status_bar.showMessage(f"Frame {frame_id} deleted", 2000)
+        except Exception as e:
+            self._status_bar.showMessage(f"Error: {e}", 3000)
+
+    @Slot(int, dict)
+    def _on_node_property_changed(self, node_id: int, properties: dict) -> None:
+        """Handle property change from property panel."""
+        try:
+            node = self._model.get_node(node_id)
+
+            if "x" in properties or "y" in properties or "z" in properties:
+                x = properties.get("x", node.x)
+                y = properties.get("y", node.y)
+                z = properties.get("z", node.z)
+                node.move_to(x, y, z)
+
+            if "restraint" in properties:
+                node.restraint = properties["restraint"]
+
+            self._on_model_changed()
+        except Exception as e:
+            self._status_bar.showMessage(f"Error: {e}", 3000)
+
+    @Slot(int, dict)
+    def _on_frame_property_changed(self, frame_id: int, properties: dict) -> None:
+        """Handle property change from property panel."""
+        try:
+            frame = self._model.get_frame(frame_id)
+
+            if "rotation" in properties:
+                frame.rotation = properties["rotation"]
+            if "label" in properties:
+                frame.label = properties["label"]
+            if "releases" in properties:
+                frame.releases = properties["releases"]
+
+            self._on_model_changed()
+        except Exception as e:
+            self._status_bar.showMessage(f"Error: {e}", 3000)
 
     def get_model(self) -> StructuralModel:
         """Get the current structural model."""

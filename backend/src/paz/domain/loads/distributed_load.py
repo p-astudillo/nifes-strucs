@@ -145,3 +145,114 @@ def uniform_load(
         start_loc=0.0,
         end_loc=1.0,
     )
+
+
+def triangular_load(
+    frame_id: int,
+    load_case_id: UUID,
+    w_max: float,
+    ascending: bool = True,
+    direction: LoadDirection = LoadDirection.GRAVITY,
+) -> DistributedLoad:
+    """
+    Create a triangular distributed load over full element length.
+
+    Args:
+        frame_id: ID of the frame element
+        load_case_id: ID of the load case
+        w_max: Maximum load intensity at one end (kN/m)
+        ascending: If True, load increases from 0 at start to w_max at end
+                   If False, load decreases from w_max at start to 0 at end
+        direction: Direction of the load
+
+    Returns:
+        DistributedLoad with triangular variation
+    """
+    if ascending:
+        return DistributedLoad(
+            frame_id=frame_id,
+            load_case_id=load_case_id,
+            direction=direction,
+            w_start=0.0,
+            w_end=w_max,
+            start_loc=0.0,
+            end_loc=1.0,
+        )
+    else:
+        return DistributedLoad(
+            frame_id=frame_id,
+            load_case_id=load_case_id,
+            direction=direction,
+            w_start=w_max,
+            w_end=0.0,
+            start_loc=0.0,
+            end_loc=1.0,
+        )
+
+
+def trapezoidal_load(
+    frame_id: int,
+    load_case_id: UUID,
+    w_start: float,
+    w_end: float,
+    direction: LoadDirection = LoadDirection.GRAVITY,
+    start_loc: float = 0.0,
+    end_loc: float = 1.0,
+) -> DistributedLoad:
+    """
+    Create a trapezoidal distributed load.
+
+    Args:
+        frame_id: ID of the frame element
+        load_case_id: ID of the load case
+        w_start: Load intensity at start (kN/m)
+        w_end: Load intensity at end (kN/m)
+        direction: Direction of the load
+        start_loc: Start location as fraction of length (0-1)
+        end_loc: End location as fraction of length (0-1)
+
+    Returns:
+        DistributedLoad with trapezoidal/linear variation
+    """
+    return DistributedLoad(
+        frame_id=frame_id,
+        load_case_id=load_case_id,
+        direction=direction,
+        w_start=w_start,
+        w_end=w_end,
+        start_loc=start_loc,
+        end_loc=end_loc,
+    )
+
+
+def partial_uniform_load(
+    frame_id: int,
+    load_case_id: UUID,
+    w: float,
+    start_loc: float,
+    end_loc: float,
+    direction: LoadDirection = LoadDirection.GRAVITY,
+) -> DistributedLoad:
+    """
+    Create a uniform distributed load over partial element length.
+
+    Args:
+        frame_id: ID of the frame element
+        load_case_id: ID of the load case
+        w: Load intensity (kN/m)
+        start_loc: Start location as fraction of length (0-1)
+        end_loc: End location as fraction of length (0-1)
+        direction: Direction of the load
+
+    Returns:
+        DistributedLoad with uniform intensity over partial length
+    """
+    return DistributedLoad(
+        frame_id=frame_id,
+        load_case_id=load_case_id,
+        direction=direction,
+        w_start=w,
+        w_end=w,
+        start_loc=start_loc,
+        end_loc=end_loc,
+    )

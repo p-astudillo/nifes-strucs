@@ -53,6 +53,26 @@ class FrameError(ModelError):
         super().__init__(message, details)
 
 
+class ShellError(ModelError):
+    """Raised when shell operations fail."""
+
+    def __init__(
+        self, message: str, shell_id: int | None = None, **kwargs: Any
+    ) -> None:
+        details = {"shell_id": shell_id, **kwargs} if shell_id else kwargs
+        super().__init__(message, details)
+
+
+class GroupError(ModelError):
+    """Raised when element group operations fail."""
+
+    def __init__(
+        self, message: str, group_id: int | None = None, **kwargs: Any
+    ) -> None:
+        details = {"group_id": group_id, **kwargs} if group_id else kwargs
+        super().__init__(message, details)
+
+
 class DuplicateNodeError(NodeError):
     """Raised when attempting to create a duplicate node."""
 

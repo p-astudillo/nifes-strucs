@@ -8,7 +8,7 @@ allowing for interchangeable engines (OpenSees, Kratos, etc.).
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 
-from paz.domain.loads import DistributedLoad, LoadCase, NodalLoad
+from paz.domain.loads import DistributedLoad, LoadCase, NodalLoad, PointLoadOnFrame
 from paz.domain.materials import Material
 from paz.domain.model import StructuralModel
 from paz.domain.results import AnalysisResults
@@ -53,6 +53,7 @@ class AnalysisEngine(ABC):
         load_case: LoadCase,
         nodal_loads: list[NodalLoad],
         distributed_loads: list[DistributedLoad],
+        point_loads: list[PointLoadOnFrame] | None = None,
     ) -> None:
         """
         Apply loads to the analysis model.
@@ -61,6 +62,7 @@ class AnalysisEngine(ABC):
             load_case: The load case being analyzed
             nodal_loads: List of nodal loads for this case
             distributed_loads: List of distributed loads for this case
+            point_loads: List of point loads on frames for this case
         """
         ...
 
@@ -106,6 +108,7 @@ class AnalysisEngine(ABC):
         load_case: LoadCase,
         nodal_loads: list[NodalLoad],
         distributed_loads: list[DistributedLoad],
+        point_loads: list[PointLoadOnFrame] | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> AnalysisResults:
         """
@@ -118,6 +121,7 @@ class AnalysisEngine(ABC):
             load_case: The load case to analyze
             nodal_loads: Nodal loads for this case
             distributed_loads: Distributed loads for this case
+            point_loads: Point loads on frames for this case
             progress_callback: Optional progress callback
 
         Returns:
@@ -125,7 +129,7 @@ class AnalysisEngine(ABC):
         """
         self.clear()
         self.build_model(model, materials, sections)
-        self.apply_loads(load_case, nodal_loads, distributed_loads)
+        self.apply_loads(load_case, nodal_loads, distributed_loads, point_loads)
 
         success = self.run_analysis(progress_callback)
 

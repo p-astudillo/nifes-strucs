@@ -86,38 +86,52 @@ class FrameResult:
 
     @property
     def V2_max(self) -> float:
-        """Maximum shear in local 2."""
+        """Maximum shear in local 2 (with sign, max by absolute value)."""
         if not self.forces:
             return 0.0
-        return max(abs(f.V2) for f in self.forces)
+        return max((f.V2 for f in self.forces), key=abs)
 
     @property
     def V3_max(self) -> float:
-        """Maximum shear in local 3."""
+        """Maximum shear in local 3 (with sign, max by absolute value)."""
         if not self.forces:
             return 0.0
-        return max(abs(f.V3) for f in self.forces)
+        return max((f.V3 for f in self.forces), key=abs)
 
     @property
     def M2_max(self) -> float:
-        """Maximum moment about local 2."""
+        """Maximum moment about local 2 (with sign, max by absolute value)."""
         if not self.forces:
             return 0.0
-        return max(abs(f.M2) for f in self.forces)
+        return max((f.M2 for f in self.forces), key=abs)
 
     @property
     def M3_max(self) -> float:
-        """Maximum moment about local 3."""
+        """Maximum moment about local 3 (with sign, max by absolute value)."""
         if not self.forces:
             return 0.0
-        return max(abs(f.M3) for f in self.forces)
+        return max((f.M3 for f in self.forces), key=abs)
 
     @property
     def T_max(self) -> float:
-        """Maximum torsion."""
+        """Maximum torsion (with sign, max by absolute value)."""
         if not self.forces:
             return 0.0
-        return max(abs(f.T) for f in self.forces)
+        return max((f.T for f in self.forces), key=abs)
+
+    @property
+    def V_max(self) -> float:
+        """Maximum shear (either direction, with sign)."""
+        v2 = self.V2_max
+        v3 = self.V3_max
+        return v2 if abs(v2) >= abs(v3) else v3
+
+    @property
+    def M_max(self) -> float:
+        """Maximum moment (either axis, with sign)."""
+        m2 = self.M2_max
+        m3 = self.M3_max
+        return m2 if abs(m2) >= abs(m3) else m3
 
     def force_at_start(self) -> FrameForces | None:
         """Get forces at start of element (location = 0)."""

@@ -13,6 +13,13 @@ from paz.core.exceptions import FrameError, ValidationError
 from paz.domain.model.local_axes import LocalAxes, calculate_local_axes
 from paz.domain.model.node import Node
 
+# Type hints for mass calculation (avoid circular imports)
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from paz.domain.materials import Material
+    from paz.domain.sections import Section
+
 
 @dataclass(frozen=True)
 class FrameReleases:
@@ -286,6 +293,49 @@ class Frame:
             node_i.y + t * (node_j.y - node_i.y),
             node_i.z + t * (node_j.z - node_i.z),
         )
+
+    def mass(self, material: "Material", section: "Section") -> float:
+        """
+        Calculate the mass of this frame element.
+
+        Mass = rho * A * L
+        where:
+            rho = material density (kg/m³)
+            A = section area (m²)
+            L = frame length (m)
+
+        Args:
+            material: Material with density (rho)
+            section: Section with area (A)
+
+        Returns:
+            Mass in kg
+
+        Raises:
+            FrameError: If nodes not set
+        """
+        length = self.length()
+        return material.rho * section.A * length
+
+    def weight(self, material: "Material", section: "Section", g: float = 9.81) -> float:
+        """
+        Calculate the weight of this frame element.
+
+        Weight = mass * g
+
+        Args:
+            material: Material with density (rho)
+            section: Section with area (A)
+            g: Gravitational acceleration (default 9.81 m/s²)
+
+        Returns:
+            Weight in kN
+
+        Raises:
+            FrameError: If nodes not set
+        """
+        mass_kg = self.mass(material, section)
+        return mass_kg * g / 1000  # Convert N to kN
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""

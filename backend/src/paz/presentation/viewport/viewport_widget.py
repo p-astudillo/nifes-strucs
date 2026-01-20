@@ -198,9 +198,12 @@ class ViewportWidget(QWidget):
         layout.addLayout(controls)
 
         # PyVista plotter
-        self._plotter = QtInteractor(self)
+        self._plotter = QtInteractor(self, auto_update=False)
         self._plotter.set_background("white")
-        self._plotter.enable_anti_aliasing("ssaa")
+        # Skip anti-aliasing on macOS ARM due to rendering issues
+        import platform
+        if platform.machine() != "arm64":
+            self._plotter.enable_anti_aliasing("ssaa")
         layout.addWidget(self._plotter.interactor, stretch=1)
 
         # Color scale

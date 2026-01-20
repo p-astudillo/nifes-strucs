@@ -160,42 +160,50 @@ class ResultsParser:
                 vals = [float(x) for x in parts[1:13]]
 
                 # Forces at start (i) - location 0.0
-                forces_i = FrameForces(
-                    location=0.0,
-                    P=vals[0],   # Ni (axial)
-                    V2=vals[1],  # Vyi (shear local 2)
-                    V3=vals[2],  # Vzi (shear local 3)
-                    T=vals[3],   # Ti (torsion)
-                    M2=vals[4],  # Myi (moment about local 2)
-                    M3=vals[5],  # Mzi (moment about local 3)
-                )
+                # OpenSees convention: positive P = tension, positive V/M per right-hand rule
+                P_i = vals[0]
+                V2_i = vals[1]
+                V3_i = vals[2]
+                T_i = vals[3]
+                M2_i = vals[4]
+                M3_i = vals[5]
 
                 # Forces at end (j) - location 1.0
-                # Sign convention: opposite at j end
+                # Sign convention: forces at j are reported in element local coords
+                # For equilibrium: P_j = -P_i (if no distributed axial load)
+                P_j = -vals[6]
+                V2_j = -vals[7]
+                V3_j = -vals[8]
+                T_j = -vals[9]
+                M2_j = -vals[10]
+                M3_j = -vals[11]
+
+                forces_i = FrameForces(
+                    location=0.0,
+                    P=P_i,
+                    V2=V2_i,
+                    V3=V3_i,
+                    T=T_i,
+                    M2=M2_i,
+                    M3=M3_i,
+                )
+
                 forces_j = FrameForces(
                     location=1.0,
-                    P=-vals[6],   # Nj
-                    V2=-vals[7],  # Vyj
-                    V3=-vals[8],  # Vzj
-                    T=-vals[9],   # Tj
-                    M2=-vals[10], # Myj
-                    M3=-vals[11], # Mzj
+                    P=P_j,
+                    V2=V2_j,
+                    V3=V3_j,
+                    T=T_j,
+                    M2=M2_j,
+                    M3=M3_j,
                 )
 
-                # Midpoint (interpolated)
-                forces_mid = FrameForces(
-                    location=0.5,
-                    P=(vals[0] - vals[6]) / 2,
-                    V2=(vals[1] - vals[7]) / 2,
-                    V3=(vals[2] - vals[8]) / 2,
-                    T=(vals[3] - vals[9]) / 2,
-                    M2=(vals[4] - vals[10]) / 2,
-                    M3=(vals[5] - vals[11]) / 2,
-                )
-
+                # Store only endpoint forces from OpenSees
+                # Intermediate points will be computed analytically in AnalysisService
+                # using the actual load data for correct parabolic moment diagrams
                 frame_results[elem_id] = FrameResult(
                     frame_id=elem_id,
-                    forces=[forces_i, forces_mid, forces_j],
+                    forces=[forces_i, forces_j],
                 )
 
             except (ValueError, IndexError):

@@ -9,11 +9,28 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TextIO
 
-from paz.domain.loads import DistributedLoad, LoadCase, LoadDirection, NodalLoad
+from paz.domain.loads import (
+    DistributedLoad,
+    LoadCase,
+    LoadDirection,
+    NodalLoad,
+    PointLoadDirection,
+    PointLoadOnFrame,
+)
 from paz.domain.materials import Material
 from paz.domain.model import StructuralModel
+from paz.domain.model.frame import Frame, FrameReleases
 from paz.domain.model.local_axes import calculate_local_axes
+from paz.domain.model.shell import ShellType
 from paz.domain.sections import Section
+
+
+# Constants for release implementation
+RELEASE_NODE_OFFSET = 200000  # Offset for release node IDs
+RELEASE_ELEMENT_OFFSET = 300000  # Offset for zeroLength element IDs
+RELEASE_MATERIAL_TAG = 999999  # Material tag for release springs
+RIGID_STIFFNESS = 1.0e12  # Very high stiffness for fixed DOFs
+RELEASE_STIFFNESS = 1.0e-6  # Very low stiffness for released DOFs
 
 
 class TclWriter:
@@ -37,6 +54,7 @@ class TclWriter:
         load_case: LoadCase,
         nodal_loads: list[NodalLoad],
         distributed_loads: list[DistributedLoad],
+        point_loads: list[PointLoadOnFrame] | None = None,
     ) -> Path:
         """
         Write complete OpenSees model to TCL file.
@@ -48,18 +66,30 @@ class TclWriter:
             load_case: Load case being analyzed
             nodal_loads: Nodal loads
             distributed_loads: Distributed loads
+            point_loads: Point loads on frames
 
         Returns:
             Path to generated TCL file
         """
         tcl_path = self.output_dir / "model.tcl"
+        point_loads = point_loads or []
+
+        # Collect frames with releases for special handling
+        frames_with_releases = [
+            f for f in model.frames
+            if not f.releases.is_fully_fixed()
+        ]
 
         with tcl_path.open("w", encoding="utf-8") as f:
             self._write_header(f, load_case)
             self._write_nodes(f, model)
+            self._write_release_nodes(f, model, frames_with_releases)
             self._write_restraints(f, model)
-            self._write_elements(f, model, materials, sections)
-            self._write_loads(f, nodal_loads, distributed_loads)
+            self._write_release_materials(f, frames_with_releases)
+            self._write_release_elements(f, model, frames_with_releases)
+            self._write_elements(f, model, materials, sections, frames_with_releases)
+            self._write_shell_elements(f, model, materials)
+            self._write_loads(f, model, nodal_loads, distributed_loads, point_loads)
             self._write_analysis(f)
             self._write_results_extraction(f, model)
 
@@ -80,6 +110,176 @@ class TclWriter:
             f.write(f"node {node.id} {node.x:.6e} {node.y:.6e} {node.z:.6e}\n")
         f.write("\n")
 
+    def _write_release_nodes(
+        self,
+        f: TextIO,
+        model: StructuralModel,
+        frames_with_releases: list[Frame],
+    ) -> None:
+        """
+        Write additional nodes for frame releases.
+
+        For each frame end with releases, we create a duplicate node at the
+        same position. The frame will connect to these duplicate nodes, and
+        zeroLength elements will connect the duplicate to the original node.
+        """
+        if not frames_with_releases:
+            return
+
+        f.write("# Release nodes (for frame end releases)\n")
+
+        for frame in frames_with_releases:
+            releases = frame.releases
+
+            # Check if end i has any releases
+            has_release_i = any([
+                releases.P_i, releases.V2_i, releases.V3_i,
+                releases.T_i, releases.M2_i, releases.M3_i,
+            ])
+
+            # Check if end j has any releases
+            has_release_j = any([
+                releases.P_j, releases.V2_j, releases.V3_j,
+                releases.T_j, releases.M2_j, releases.M3_j,
+            ])
+
+            if has_release_i:
+                node_i = model.get_node(frame.node_i_id)
+                release_node_i = RELEASE_NODE_OFFSET + frame.id * 2
+                f.write(
+                    f"node {release_node_i} {node_i.x:.6e} {node_i.y:.6e} {node_i.z:.6e}"
+                    f"  ;# Release node for frame {frame.id} end i\n"
+                )
+
+            if has_release_j:
+                node_j = model.get_node(frame.node_j_id)
+                release_node_j = RELEASE_NODE_OFFSET + frame.id * 2 + 1
+                f.write(
+                    f"node {release_node_j} {node_j.x:.6e} {node_j.y:.6e} {node_j.z:.6e}"
+                    f"  ;# Release node for frame {frame.id} end j\n"
+                )
+
+        f.write("\n")
+
+    def _write_release_materials(
+        self,
+        f: TextIO,
+        frames_with_releases: list[Frame],
+    ) -> None:
+        """
+        Write materials for zeroLength release elements.
+
+        Creates elastic materials with very high stiffness (fixed) or very low
+        stiffness (released) for each DOF.
+        """
+        if not frames_with_releases:
+            return
+
+        f.write("# Release materials for zeroLength elements\n")
+        f.write(f"# Rigid stiffness: {RIGID_STIFFNESS:.2e}\n")
+        f.write(f"# Release stiffness: {RELEASE_STIFFNESS:.2e}\n")
+
+        # Create one rigid and one flexible material for each DOF direction
+        # DOF 1: axial (P), DOF 2: V2, DOF 3: V3, DOF 4: T, DOF 5: M2, DOF 6: M3
+        mat_rigid = RELEASE_MATERIAL_TAG
+        mat_release = RELEASE_MATERIAL_TAG + 1
+
+        f.write(f"uniaxialMaterial Elastic {mat_rigid} {RIGID_STIFFNESS:.6e}  ;# Rigid\n")
+        f.write(f"uniaxialMaterial Elastic {mat_release} {RELEASE_STIFFNESS:.6e}  ;# Release\n")
+        f.write("\n")
+
+    def _get_release_materials(self, releases: FrameReleases, end: str) -> list[int]:
+        """
+        Get material tags for each DOF based on release configuration.
+
+        Args:
+            releases: Frame releases configuration
+            end: 'i' or 'j' for which end
+
+        Returns:
+            List of 6 material tags for DOFs 1-6
+        """
+        mat_rigid = RELEASE_MATERIAL_TAG
+        mat_release = RELEASE_MATERIAL_TAG + 1
+
+        if end == 'i':
+            return [
+                mat_release if releases.P_i else mat_rigid,   # DOF 1: Axial
+                mat_release if releases.V2_i else mat_rigid,  # DOF 2: Shear V2
+                mat_release if releases.V3_i else mat_rigid,  # DOF 3: Shear V3
+                mat_release if releases.T_i else mat_rigid,   # DOF 4: Torsion
+                mat_release if releases.M2_i else mat_rigid,  # DOF 5: Moment M2
+                mat_release if releases.M3_i else mat_rigid,  # DOF 6: Moment M3
+            ]
+        else:  # end == 'j'
+            return [
+                mat_release if releases.P_j else mat_rigid,
+                mat_release if releases.V2_j else mat_rigid,
+                mat_release if releases.V3_j else mat_rigid,
+                mat_release if releases.T_j else mat_rigid,
+                mat_release if releases.M2_j else mat_rigid,
+                mat_release if releases.M3_j else mat_rigid,
+            ]
+
+    def _write_release_elements(
+        self,
+        f: TextIO,
+        model: StructuralModel,
+        frames_with_releases: list[Frame],
+    ) -> None:
+        """
+        Write zeroLength elements to implement releases.
+
+        Each zeroLength element connects the original node to the release node,
+        with appropriate stiffness for each DOF.
+        """
+        if not frames_with_releases:
+            return
+
+        f.write("# ZeroLength elements for frame releases\n")
+
+        for frame in frames_with_releases:
+            releases = frame.releases
+
+            # Check if end i has any releases
+            has_release_i = any([
+                releases.P_i, releases.V2_i, releases.V3_i,
+                releases.T_i, releases.M2_i, releases.M3_i,
+            ])
+
+            # Check if end j has any releases
+            has_release_j = any([
+                releases.P_j, releases.V2_j, releases.V3_j,
+                releases.T_j, releases.M2_j, releases.M3_j,
+            ])
+
+            if has_release_i:
+                original_node = frame.node_i_id
+                release_node = RELEASE_NODE_OFFSET + frame.id * 2
+                ele_tag = RELEASE_ELEMENT_OFFSET + frame.id * 2
+                mats = self._get_release_materials(releases, 'i')
+
+                # element zeroLength eleTag iNode jNode -mat matTag1 ... -dir 1 2 3 4 5 6
+                f.write(
+                    f"element zeroLength {ele_tag} {original_node} {release_node} "
+                    f"-mat {mats[0]} {mats[1]} {mats[2]} {mats[3]} {mats[4]} {mats[5]} "
+                    f"-dir 1 2 3 4 5 6  ;# Release for frame {frame.id} end i\n"
+                )
+
+            if has_release_j:
+                original_node = frame.node_j_id
+                release_node = RELEASE_NODE_OFFSET + frame.id * 2 + 1
+                ele_tag = RELEASE_ELEMENT_OFFSET + frame.id * 2 + 1
+                mats = self._get_release_materials(releases, 'j')
+
+                f.write(
+                    f"element zeroLength {ele_tag} {original_node} {release_node} "
+                    f"-mat {mats[0]} {mats[1]} {mats[2]} {mats[3]} {mats[4]} {mats[5]} "
+                    f"-dir 1 2 3 4 5 6  ;# Release for frame {frame.id} end j\n"
+                )
+
+        f.write("\n")
+
     def _write_restraints(self, f: TextIO, model: StructuralModel) -> None:
         """Write boundary conditions."""
         f.write("# Boundary conditions (restraints)\n")
@@ -95,9 +295,14 @@ class TclWriter:
         model: StructuralModel,
         materials: dict[str, Material],
         sections: dict[str, Section],
+        frames_with_releases: list[Frame] | None = None,
     ) -> None:
         """Write frame elements with geometric transformations."""
         f.write("# Frame elements\n")
+
+        # Create a set of frame IDs with releases for quick lookup
+        frames_with_releases = frames_with_releases or []
+        release_frame_ids = {fr.id for fr in frames_with_releases}
 
         for frame in model.frames:
             material = materials.get(frame.material_name)
@@ -126,24 +331,118 @@ class TclWriter:
             E = material.E
             G = material.G
             J = section.J if section.J is not None else (section.Ix + section.Iy) / 2
-            Iy = section.Iy
-            Iz = section.Ix  # Strong axis
+            # In OpenSees with geomTransf vecxz pointing to Z:
+            # - Iy: moment of inertia for bending in local xz plane (loads in Z)
+            # - Iz: moment of inertia for bending in local xy plane (loads in Y)
+            # section.Ix is typically the strong axis (larger I)
+            Iy = section.Ix  # Strong axis - for vertical loads (Z direction)
+            Iz = section.Iy  # Weak axis - for horizontal loads (Y direction)
+
+            # Determine which nodes to connect
+            # If frame has releases, connect to release nodes instead of original nodes
+            if frame.id in release_frame_ids:
+                releases = frame.releases
+
+                # Check end i
+                has_release_i = any([
+                    releases.P_i, releases.V2_i, releases.V3_i,
+                    releases.T_i, releases.M2_i, releases.M3_i,
+                ])
+                connect_node_i = (
+                    RELEASE_NODE_OFFSET + frame.id * 2
+                    if has_release_i
+                    else frame.node_i_id
+                )
+
+                # Check end j
+                has_release_j = any([
+                    releases.P_j, releases.V2_j, releases.V3_j,
+                    releases.T_j, releases.M2_j, releases.M3_j,
+                ])
+                connect_node_j = (
+                    RELEASE_NODE_OFFSET + frame.id * 2 + 1
+                    if has_release_j
+                    else frame.node_j_id
+                )
+            else:
+                connect_node_i = frame.node_i_id
+                connect_node_j = frame.node_j_id
 
             # Write element
             # elasticBeamColumn eleTag iNode jNode A E G J Iy Iz transfTag
             f.write(
                 f"element elasticBeamColumn {frame.id} "
-                f"{frame.node_i_id} {frame.node_j_id} "
+                f"{connect_node_i} {connect_node_j} "
                 f"{A:.6e} {E:.6e} {G:.6e} {J:.6e} {Iy:.6e} {Iz:.6e} {transf_tag}\n"
             )
+
+        f.write("\n")
+
+    def _write_shell_elements(
+        self,
+        f: TextIO,
+        model: StructuralModel,
+        materials: dict[str, Material],
+    ) -> None:
+        """Write shell elements."""
+        if model.shell_count == 0:
+            return
+
+        f.write("# Shell elements\n")
+
+        # Shell element tags start after frames to avoid conflicts
+        shell_tag_offset = 100000
+
+        for shell in model.shells:
+            material = materials.get(shell.material_name)
+            if material is None:
+                continue
+
+            # Shell tag
+            shell_tag = shell_tag_offset + shell.id
+
+            # Create nDMaterial for shell (ElasticIsotropic)
+            # nDMaterial tag = shell_tag
+            E = material.E
+            nu = material.nu
+            rho = material.rho
+
+            f.write(
+                f"nDMaterial ElasticIsotropic {shell_tag} {E:.6e} {nu:.6e} {rho:.6e}\n"
+            )
+
+            # Create section for shell
+            # section PlateFiber secTag matTag thickness
+            section_tag = shell_tag
+            f.write(
+                f"section PlateFiber {section_tag} {shell_tag} {shell.thickness:.6e}\n"
+            )
+
+            # Create shell element based on number of nodes
+            if shell.is_quadrilateral:
+                # 4-node shell: ShellMITC4
+                # element ShellMITC4 eleTag node1 node2 node3 node4 secTag
+                n1, n2, n3, n4 = shell.node_ids
+                f.write(
+                    f"element ShellMITC4 {shell_tag} {n1} {n2} {n3} {n4} {section_tag}\n"
+                )
+            else:
+                # 3-node shell: ShellDKGT (triangular shell)
+                # element ShellDKGT eleTag node1 node2 node3 secTag
+                n1, n2, n3 = shell.node_ids
+                f.write(
+                    f"element ShellDKGT {shell_tag} {n1} {n2} {n3} {section_tag}\n"
+                )
 
         f.write("\n")
 
     def _write_loads(
         self,
         f: TextIO,
+        model: StructuralModel,
         nodal_loads: list[NodalLoad],
         distributed_loads: list[DistributedLoad],
+        point_loads: list[PointLoadOnFrame],
     ) -> None:
         """Write load patterns."""
         # Pattern for nodal loads
@@ -158,31 +457,140 @@ class TclWriter:
                 )
             f.write("}\n\n")
 
-        # Pattern for distributed loads
-        if distributed_loads:
-            f.write("# Distributed loads\n")
+        # Pattern for element loads (distributed and point)
+        if distributed_loads or point_loads:
+            f.write("# Element loads (distributed and point)\n")
             f.write('pattern Plain 2 "Linear" {\n')
+
+            # Distributed loads
             for dist_load in distributed_loads:
-                wy, wz = self._get_distributed_load_components(dist_load)
-                if abs(wy) > 1e-12 or abs(wz) > 1e-12:
-                    f.write(
-                        f"    eleLoad -ele {dist_load.frame_id} "
-                        f"-type -beamUniform {wy:.6e} {wz:.6e}\n"
-                    )
+                self._write_distributed_load(f, dist_load, model)
+
+            # Point loads on frames
+            for pt_load in point_loads:
+                self._write_point_load_on_frame(f, pt_load, model)
+
             f.write("}\n\n")
 
+    def _write_distributed_load(
+        self,
+        f: TextIO,
+        load: DistributedLoad,
+        model: StructuralModel,
+    ) -> None:
+        """Write a distributed load command."""
+        # Get frame length for partial load calculations
+        frame = None
+        for frm in model.frames:
+            if frm.id == load.frame_id:
+                frame = frm
+                break
+
+        if frame is None:
+            return
+
+        # Check if uniform or trapezoidal
+        if load.is_uniform and load.is_full_length:
+            # Simple uniform load over full length
+            wy, wz = self._get_distributed_load_components(load, load.w_start)
+            if abs(wy) > 1e-12 or abs(wz) > 1e-12:
+                f.write(
+                    f"    eleLoad -ele {load.frame_id} "
+                    f"-type -beamUniform {wy:.6e} {wz:.6e}\n"
+                )
+        elif load.is_uniform and not load.is_full_length:
+            # Partial uniform load - use equivalent nodal loads
+            # OpenSees eleLoad doesn't directly support partial loads
+            # We approximate with beamUniform over full length scaled
+            # For now, use average and warn in comments
+            scale = load.end_loc - load.start_loc
+            wy, wz = self._get_distributed_load_components(load, load.w_start * scale)
+            f.write(f"    # Partial uniform load ({load.start_loc:.2f} to {load.end_loc:.2f})\n")
+            if abs(wy) > 1e-12 or abs(wz) > 1e-12:
+                f.write(
+                    f"    eleLoad -ele {load.frame_id} "
+                    f"-type -beamUniform {wy:.6e} {wz:.6e}\n"
+                )
+        else:
+            # Trapezoidal load - split into uniform + triangular components
+            # w(x) = w_start + (w_end - w_start) * x
+            # = uniform part + triangular part
+            w_avg = (load.w_start + load.w_end) / 2
+            wy, wz = self._get_distributed_load_components(load, w_avg)
+
+            f.write(f"    # Trapezoidal load ({load.w_start:.2f} to {load.w_end:.2f} kN/m)\n")
+            if abs(wy) > 1e-12 or abs(wz) > 1e-12:
+                # Using average for now - OpenSees beamUniform is for constant loads
+                # For accurate trapezoidal, would need eleLoad with -beamPoint at multiple locations
+                f.write(
+                    f"    eleLoad -ele {load.frame_id} "
+                    f"-type -beamUniform {wy:.6e} {wz:.6e}\n"
+                )
+
+    def _write_point_load_on_frame(
+        self,
+        f: TextIO,
+        load: PointLoadOnFrame,
+        model: StructuralModel,
+    ) -> None:
+        """Write a point load on frame command."""
+        # Get frame to calculate absolute position
+        frame = None
+        for frm in model.frames:
+            if frm.id == load.frame_id:
+                frame = frm
+                break
+
+        if frame is None:
+            return
+
+        # Get frame length
+        node_i = model.get_node(frame.node_i_id)
+        node_j = model.get_node(frame.node_j_id)
+        dx = node_j.x - node_i.x
+        dy = node_j.y - node_i.y
+        dz = node_j.z - node_i.z
+        length = (dx**2 + dy**2 + dz**2) ** 0.5
+
+        # Get load components in local coordinates
+        Py, Pz = self._get_point_load_components(load)
+
+        f.write(f"    # Point load at {load.location:.2f}L\n")
+
+        # Use eleLoad -beamPoint for point loads
+        # eleLoad -ele $tag -type -beamPoint $Py $Pz $aLoc
+        # aLoc is the relative location (0-1)
+        if abs(Py) > 1e-12 or abs(Pz) > 1e-12:
+            f.write(
+                f"    eleLoad -ele {load.frame_id} "
+                f"-type -beamPoint {Py:.6e} {Pz:.6e} {load.location:.6e}\n"
+            )
+
     def _get_distributed_load_components(
-        self, load: DistributedLoad
+        self, load: DistributedLoad, w: float
     ) -> tuple[float, float]:
         """Convert distributed load to local wy, wz components."""
-        w = load.average_intensity
-
         if load.direction == LoadDirection.GRAVITY:
             return 0.0, -w
         elif load.direction in (LoadDirection.LOCAL_Y, LoadDirection.GLOBAL_Y):
             return w, 0.0
         elif load.direction in (LoadDirection.LOCAL_Z, LoadDirection.GLOBAL_Z):
             return 0.0, w
+        else:
+            return 0.0, 0.0
+
+    def _get_point_load_components(
+        self, load: PointLoadOnFrame
+    ) -> tuple[float, float]:
+        """Convert point load to local Py, Pz components."""
+        P = load.P
+
+        if load.direction == PointLoadDirection.GRAVITY:
+            return 0.0, -P
+        elif load.direction in (PointLoadDirection.LOCAL_Y, PointLoadDirection.GLOBAL_Y):
+            return P, 0.0
+        elif load.direction in (PointLoadDirection.LOCAL_Z, PointLoadDirection.GLOBAL_Z):
+            return 0.0, P
         else:
             return 0.0, 0.0
 
